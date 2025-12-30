@@ -12,7 +12,7 @@ const TEAM_BLUE = 'blue';
 
 // 單位屬性字典
 const UNIT_STATS = {
-    'king': { hp: 20, dmg: 3, rng: 1, ap_atk: 2, ap_move: 1 },
+    'king': { hp: 20, dmg: 10, rng: 1, ap_atk: 3, ap_move: 1 },
     'gen': { hp: 15, dmg: 5, rng: 1, ap_atk: 2, ap_move: 1 },
     'sol': { hp: 8, dmg: 3, rng: 1, ap_atk: 2, ap_move: 1 },
     'arc': { hp: 5, dmg: 3, rng: 5, ap_atk: 2, ap_move: 1 },
@@ -22,8 +22,8 @@ const UNIT_STATS = {
 
 // 單位中文名稱
 const UNIT_NAMES = {
-    'king': '王', 'gen': '將', 'sol': '兵',
-    'arc': '弓', 'mage': '法', 'can': '炮'
+    'king': '國王', 'gen': '將軍', 'sol': '士兵',
+    'arc': '弓箭手', 'mage': '法師', 'can': '炮'
 };
 
 class GameEngine {
@@ -133,7 +133,8 @@ class GameEngine {
             team: team,
             hp: stats.hp,
             max_hp: stats.hp,
-            attacks_used: 0
+            attacks_used: 0,
+            cooldown: 0  // 冷卻回合數（用於炮）
         };
     }
 
@@ -159,6 +160,23 @@ class GameEngine {
 
     isInBounds(x, y) {
         return x >= 0 && x < BOARD_COLS && y >= 0 && y < BOARD_ROWS;
+    }
+
+    // 檢查是否在己方將軍的保護範圍內（3x3，不含將軍自身）
+    isInGeneralProtection(x, y, team) {
+        // 尋找己方將軍位置
+        for (const [pos, unit] of Object.entries(this.state.board)) {
+            if (unit.type === 'gen' && unit.team === team) {
+                const [gx, gy] = pos.split('_').map(Number);
+                // 檢查是否在將軍周圍3x3範圍內（不含將軍自身）
+                const dx = Math.abs(x - gx);
+                const dy = Math.abs(y - gy);
+                if (dx <= 1 && dy <= 1 && !(dx === 0 && dy === 0)) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     // ==================== 移動邏輯 ====================
@@ -195,7 +213,11 @@ class GameEngine {
                 this.state.blue_ap -= 2;
             }
 
-            return { success: true, message: '交換位置', ap_used: 2 };
+            // 檢查是否需要自動換回合
+            const remainingAP = this.state.current_turn === TEAM_RED ? this.state.red_ap : this.state.blue_ap;
+            const auto_turn_end = remainingAP === 0;
+
+            return { success: true, message: '交換位置', ap_used: 2, auto_turn_end: auto_turn_end };
         }
 
         // 跳躍邏輯
@@ -219,7 +241,11 @@ class GameEngine {
                 this.state.blue_ap -= 1;
             }
 
-            return { success: true, message: '跳躍移動', ap_used: 1 };
+            // 檢查是否需要自動換回合
+            const remainingAP = this.state.current_turn === TEAM_RED ? this.state.red_ap : this.state.blue_ap;
+            const auto_turn_end = remainingAP === 0;
+
+            return { success: true, message: '跳躍移動', ap_used: 1, auto_turn_end: auto_turn_end };
         }
 
         // 一般移動
@@ -245,7 +271,11 @@ class GameEngine {
             this.state.blue_ap -= apMove;
         }
 
-        return { success: true, message: '移動', ap_used: apMove };
+        // 檢查是否需要自動換回合
+        const remainingAP = this.state.current_turn === TEAM_RED ? this.state.red_ap : this.state.blue_ap;
+        const auto_turn_end = remainingAP === 0;
+
+        return { success: true, message: '移動', ap_used: apMove, auto_turn_end: auto_turn_end };
     }
 
     canJump(unit, sx, sy, tx, ty) {
@@ -301,6 +331,11 @@ class GameEngine {
         // 檢查 AP
         if (currentAP < stats.ap_atk) {
             return { success: false, error: `AP 不足 (需要 ${stats.ap_atk} AP)` };
+        }
+
+        // 檢查炮的冷卻
+        if (attacker.type === 'can' && attacker.cooldown > 0) {
+            return { success: false, error: `炮處於冷卻中 (剩餘 ${attacker.cooldown} 回合)` };
         }
 
         // 檢查攻擊次數限制
@@ -369,6 +404,10 @@ class GameEngine {
         // 更新攻擊次數
         if (this.state.board[`${sx}_${sy}`]) {
             this.state.board[`${sx}_${sy}`].attacks_used++;
+            // 炮攻擊後設置3回合冷卻
+            if (attacker.type === 'can') {
+                this.state.board[`${sx}_${sy}`].cooldown = 3;
+            }
         }
 
         // 扣除 AP
@@ -378,7 +417,11 @@ class GameEngine {
             this.state.blue_ap -= stats.ap_atk;
         }
 
-        return { success: true, events: events, ap_used: stats.ap_atk };
+        // 檢查是否需要自動換回合
+        const remainingAP = this.state.current_turn === TEAM_RED ? this.state.red_ap : this.state.blue_ap;
+        const auto_turn_end = remainingAP === 0;
+
+        return { success: true, events: events, ap_used: stats.ap_atk, auto_turn_end: auto_turn_end };
     }
 
     checkLineOfSight(attacker, x1, y1, x2, y2) {
@@ -412,15 +455,24 @@ class GameEngine {
         const unit = this.getUnitAt(x, y);
         if (!unit || !unit.team) return null;
 
-        this.state.board[`${x}_${y}`].hp -= damage;
+        // 檢查是否受將軍保護（僅對敵方攻擊有效）
+        let finalDamage = damage;
+        if (unit.team !== attackerTeam && this.isInGeneralProtection(x, y, unit.team)) {
+            finalDamage = Math.round(damage / 2);
+            // 確保最低傷害為1
+            if (finalDamage < 1) finalDamage = 1;
+        }
+
+        this.state.board[`${x}_${y}`].hp -= finalDamage;
 
         const event = {
             type: 'damage',
             x: x,
             y: y,
             unit_id: unit.id,
-            damage: damage,
-            new_hp: this.state.board[`${x}_${y}`].hp
+            damage: finalDamage,
+            new_hp: this.state.board[`${x}_${y}`].hp,
+            protected: finalDamage !== damage  // 標記是否受保護
         };
 
         // 檢查死亡
@@ -441,6 +493,13 @@ class GameEngine {
 
     // ==================== 結束回合 ====================
     endTurn() {
+        // 減少當前回合方所有單位的冷卻時間
+        for (const unit of Object.values(this.state.board)) {
+            if (unit.team === this.state.current_turn && unit.cooldown > 0) {
+                unit.cooldown--;
+            }
+        }
+
         // 切換回合
         this.state.current_turn = this.state.current_turn === TEAM_RED ? TEAM_BLUE : TEAM_RED;
 

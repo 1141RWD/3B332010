@@ -6,25 +6,54 @@
 
 body {
     font-family: 'Microsoft JhengHei', 'PingFang TC', sans-serif;
-    background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+    background: url('assets/battlefield_bg.png') no-repeat center center fixed;
+    background-size: cover;
     color: #fff;
     min-height: 100vh;
     padding: 20px;
 }
 
 .container {
-    max-width: 1400px;
-    margin: 0 auto;
+    max-width: 100%;
+    height: 100vh;
+    margin: 0;
+    padding: 10px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 20px;
 }
 
-header {
-    background: rgba(0, 0, 0, 0.5);
-    padding: 20px;
-    border-radius: 10px;
-    margin-bottom: 20px;
+/* 移除舊 header 相關樣式 */
+/* header { ... } */
+/* .game-info { ... } */
+
+.side-panel {
     display: flex;
-    justify-content: space-between;
+    flex-direction: column;
+    justify-content: center;
     align-items: center;
+}
+
+.left-panel {
+    width: 200px;
+    align-items: flex-end;
+    /* 靠右對齊棋盤 */
+}
+
+.right-panel {
+    width: 320px;
+    height: 95vh;
+    justify-content: flex-start;
+    gap: 10px;
+}
+
+.controls-area {
+    width: 100%;
+    margin-top: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
 }
 
 .game-info {
@@ -57,6 +86,19 @@ header {
     border-radius: 5px;
 }
 
+/* AP 計數器（移至戰鬥記錄下方） */
+.ap-counter-bottom {
+    margin-top: 15px;
+    padding: 10px 15px;
+    background: rgba(77, 171, 247, 0.3);
+    border: 2px solid #4dabf7;
+    border-radius: 5px;
+    text-align: center;
+    font-size: 18px;
+    font-weight: bold;
+    color: #fff;
+}
+
 .victory-message {
     font-size: 28px;
     font-weight: bold;
@@ -84,6 +126,9 @@ header {
     cursor: pointer;
     font-weight: bold;
     transition: all 0.3s;
+    width: 100%;
+    /* Buttons full width */
+    margin: 5px 0;
 }
 
 .btn-end-turn {
@@ -107,16 +152,17 @@ header {
     transform: scale(1.05);
 }
 
-.game-area {
-    display: flex;
-    gap: 20px;
-}
+/* Game Area Layout Adjustments */
+/* .game-area removed, logic moved to container */
 
 .board-container {
     flex: 1;
-    background: rgba(0, 0, 0, 0.3);
-    padding: 20px;
-    border-radius: 10px;
+    height: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    position: relative;
+    /* background removed or adjusted */
 }
 
 .game-board {
@@ -126,6 +172,13 @@ header {
     background: #333;
     padding: 2px;
     border-radius: 5px;
+    /* Maintain aspect ratio and fit within viewport */
+    width: auto;
+    /* Increase size: allow up to 95vh */
+    height: 95vh;
+    max-width: calc((95vh - 4px) * (13 / 15));
+    aspect-ratio: 13 / 15;
+    margin: 0 auto;
 }
 
 .cell {
@@ -137,9 +190,15 @@ header {
     align-items: center;
     cursor: pointer;
     position: relative;
+    cursor: pointer;
+    position: relative;
     border: 2px solid transparent;
-    transition: all 0.2s;
+    /* Fixed border width */
+    transition: background-color 0.2s, border-color 0.2s, box-shadow 0.2s;
+    /* Avoid animating layout properties */
     font-size: 12px;
+    overflow: hidden;
+    /* Prevent content from expanding cell */
 }
 
 .cell:hover {
@@ -176,16 +235,36 @@ header {
     border-color: #ff6b6b;
 }
 
+/* .unit-type { ... } removed or kept as fallback */
 .unit-type {
     font-size: 18px;
     font-weight: bold;
     color: #000;
 }
 
+.unit-img {
+    width: 80%;
+    height: 80%;
+    object-fit: contain;
+    filter: drop-shadow(2px 2px 2px rgba(0, 0, 0, 0.5));
+    transition: transform 0.2s;
+}
+
+.cell:hover .unit-img {
+    transform: scale(1.1);
+}
+
 .unit-hp {
     font-size: 10px;
     color: #000;
-    margin-top: 2px;
+    margin-top: -5px;
+    /* Pull up closer to image */
+    position: relative;
+    z-index: 2;
+    background: rgba(255, 255, 255, 0.7);
+    padding: 0 2px;
+    border-radius: 3px;
+    font-weight: bold;
 }
 
 .hp-bar {
@@ -204,10 +283,16 @@ header {
 }
 
 .log-panel {
-    width: 300px;
+    width: 100%;
+    flex: 1;
+    /* Take remaining height */
     background: rgba(0, 0, 0, 0.5);
-    padding: 20px;
+    padding: 15px;
     border-radius: 10px;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    /* Important for scroll in flex item */
 }
 
 .log-panel h3 {
@@ -216,7 +301,7 @@ header {
 }
 
 .log-content {
-    height: 600px;
+    flex: 1;
     overflow-y: auto;
     font-size: 14px;
 }
@@ -263,6 +348,19 @@ header {
     gap: 10px;
     z-index: 1000;
     animation: fadeIn 0.2s;
+    flex-direction: column;
+    /* Stack title and buttons */
+    min-width: 120px;
+}
+
+.action-menu-title {
+    color: #ffd700;
+    font-weight: bold;
+    margin-bottom: 5px;
+    text-align: center;
+    font-size: 16px;
+    border-bottom: 1px solid rgba(255, 215, 0, 0.3);
+    padding-bottom: 5px;
 }
 
 @keyframes fadeIn {
@@ -328,23 +426,31 @@ header {
 
 /* 攻擊目標高亮樣式 */
 .cell.attack-target {
-    box-shadow: 0 0 20px #51cf66 !important;
-    border: 3px solid #51cf66 !important;
-    animation: pulse-target 0.8s infinite;
+    box-shadow: 0 0 15px #51cf66 !important;
+    border-color: #51cf66 !important;
+    /* Remove border-width change to prevent layout shift */
+    animation: pulse-target 1s infinite;
 }
 
 @keyframes pulse-target {
 
     0%,
     100% {
-        box-shadow: 0 0 20px #51cf66;
-        border-width: 3px;
+        box-shadow: 0 0 15px #51cf66;
+        background-color: rgba(81, 207, 102, 0.1);
     }
 
     50% {
-        box-shadow: 0 0 30px #51cf66;
-        border-width: 4px;
+        box-shadow: 0 0 25px #51cf66;
+        background-color: rgba(81, 207, 102, 0.2);
     }
+}
+
+/* 濺射傷害範圍高亮 */
+.cell.splash-target {
+    background: rgba(255, 0, 0, 0.3) !important;
+    border-color: #ff0000 !important;
+    box-shadow: inset 0 0 10px #ff0000;
 }
 
 /* SVG覆蓋層 */
@@ -361,4 +467,91 @@ header {
     stroke-width: 5;
     stroke-linecap: round;
     filter: drop-shadow(0 0 8px #51cf66);
+}
+
+/* 中央提示訊息 */
+.central-message {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 1000;
+    display: none;
+    justify-content: center;
+    align-items: center;
+    font-size: 48px;
+    font-weight: bold;
+    color: #fff;
+    text-shadow: 0 0 20px rgba(0, 0, 0, 0.8),
+        0 0 40px rgba(0, 0, 0, 0.6);
+    padding: 30px 60px;
+    border-radius: 15px;
+    animation: messageSlideIn 0.5s ease-out;
+    pointer-events: none;
+}
+
+.central-message.turn {
+    background: linear-gradient(135deg, rgba(77, 171, 247, 0.95), rgba(51, 154, 240, 0.95));
+    border: 4px solid #4dabf7;
+    box-shadow: 0 0 40px rgba(77, 171, 247, 0.8);
+}
+
+.central-message.victory {
+    background: linear-gradient(135deg, rgba(255, 215, 0, 0.95), rgba(255, 193, 7, 0.95));
+    border: 4px solid #ffd700;
+    box-shadow: 0 0 60px rgba(255, 215, 0, 0.9);
+    animation: victoryPulse 1.5s infinite;
+}
+
+@keyframes messageSlideIn {
+    from {
+        opacity: 0;
+        transform: translate(-50%, -60%);
+    }
+
+    to {
+        opacity: 1;
+        transform: translate(-50%, -50%);
+    }
+}
+
+@keyframes victoryPulse {
+
+    0%,
+    100% {
+        transform: translate(-50%, -50%) scale(1);
+        box-shadow: 0 0 60px rgba(255, 215, 0, 0.9);
+    }
+
+    50% {
+        transform: translate(-50%, -50%) scale(1.05);
+        box-shadow: 0 0 80px rgba(255, 215, 0, 1);
+    }
+}
+
+/* 冷卻指示器 */
+.cooldown-indicator {
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    background: rgba(255, 107, 107, 0.9);
+    color: #fff;
+    font-size: 9px;
+    font-weight: bold;
+    padding: 2px 4px;
+    border-radius: 3px;
+    box-shadow: 0 0 8px rgba(255, 107, 107, 0.8);
+    animation: cooldownBlink 1s infinite;
+}
+
+@keyframes cooldownBlink {
+
+    0%,
+    100% {
+        opacity: 1;
+    }
+
+    50% {
+        opacity: 0.6;
+    }
 }

@@ -10,27 +10,33 @@
 
 <body>
     <div class="container">
-        <header>
-            <div class="game-info">
-                <div id="turnIndicator" class="turn-indicator turn-red">紅方回合</div>
-                <div id="apCounter" class="ap-counter">AP: 6</div>
-                <div id="victoryMessage" class="victory-message" style="display: none;"></div>
-            </div>
-            <div class="controls">
-                <button class="btn-end-turn" onclick="endTurn()">結束回合</button>
-                <button class="btn-reset" onclick="resetGame()">重新開始</button>
-            </div>
-        </header>
+        <!-- 左側面板：回合指示 -->
+        <div class="side-panel left-panel">
+            <div id="turnIndicator" class="turn-indicator turn-red">紅方回合</div>
+            <div id="victoryMessage" class="victory-message" style="display: none;"></div>
+        </div>
 
-        <div class="game-area">
-            <div class="board-container" style="position: relative;">
-                <div id="gameBoard" class="game-board"></div>
-                <svg id="attackRangeOverlay" width="100%" height="100%"></svg>
-            </div>
+        <!-- 中間面板：棋盤 -->
+        <div class="board-container">
+            <div id="gameBoard" class="game-board"></div>
+            <svg id="attackRangeOverlay" width="100%" height="100%"></svg>
+            <!-- 中央提示訊息 -->
+            <div id="centralMessage" class="central-message"></div>
+        </div>
 
+        <!-- 右側面板：紀錄與控制 -->
+        <div class="side-panel right-panel">
             <div class="log-panel">
                 <h3>戰鬥紀錄</h3>
                 <div id="logContent" class="log-content"></div>
+            </div>
+
+            <div class="controls-area">
+                <div id="apCounter" class="ap-counter-bottom">AP: 6</div>
+                <div class="controls">
+                    <button class="btn-end-turn" onclick="endTurn()">結束回合</button>
+                    <button class="btn-reset" onclick="resetGame()">重新開始</button>
+                </div>
             </div>
         </div>
     </div>
@@ -49,6 +55,10 @@
         // 初始化遊戲
         function initGame() {
             gameState = gameEngine.initGameState();
+            // 隱藏所有提示訊息
+            document.getElementById('victoryMessage').style.display = 'none';
+            document.getElementById('centralMessage').style.display = 'none';
+
             renderBoard();
             updateUI();
             addLog('遊戲開始！紅方先手');
@@ -71,13 +81,27 @@
                     if (unit) {
                         if (unit.type === 'obstacle') {
                             cell.classList.add('obstacle');
-                            cell.innerHTML = '🪨';
+                            const obstacleImg = document.createElement('img');
+                            obstacleImg.className = 'unit-img';
+                            obstacleImg.src = 'assets/obstacle.png';
+                            obstacleImg.alt = '障礙物';
+                            cell.appendChild(obstacleImg);
                         } else {
                             cell.classList.add(unit.team + '-unit');
 
-                            const unitType = document.createElement('div');
-                            unitType.className = 'unit-type';
-                            unitType.textContent = UNIT_NAMES[unit.type];
+                            // 使用圖片取代文字字元
+                            const unitImg = document.createElement('img');
+                            unitImg.className = 'unit-img';
+                            unitImg.src = `assets/${unit.type}.png`;
+                            unitImg.alt = UNIT_NAMES[unit.type];
+                            // 圖片載入失敗時回退到文字
+                            unitImg.onerror = function () {
+                                this.style.display = 'none';
+                                const fallbackText = document.createElement('div');
+                                fallbackText.className = 'unit-type';
+                                fallbackText.textContent = UNIT_NAMES[unit.type];
+                                cell.insertBefore(fallbackText, cell.firstChild);
+                            };
 
                             const unitHP = document.createElement('div');
                             unitHP.className = 'unit-hp';
@@ -90,9 +114,17 @@
                             hpFill.style.width = `${(unit.hp / unit.max_hp) * 100}%`;
                             hpBar.appendChild(hpFill);
 
-                            cell.appendChild(unitType);
+                            cell.appendChild(unitImg);
                             cell.appendChild(unitHP);
                             cell.appendChild(hpBar);
+
+                            // 顯示炮的冷卻狀態
+                            if (unit.type === 'can' && unit.cooldown > 0) {
+                                const cooldownIndicator = document.createElement('div');
+                                cooldownIndicator.className = 'cooldown-indicator';
+                                cooldownIndicator.textContent = `冷卻:${unit.cooldown}`;
+                                cell.appendChild(cooldownIndicator);
+                            }
                         }
                     }
 
@@ -163,8 +195,8 @@
             }
             const svg = document.getElementById('attackRangeOverlay');
             if (svg) svg.innerHTML = '';
-            document.querySelectorAll('.move-highlight, .attack-target').forEach(el => {
-                el.classList.remove('move-highlight', 'attack-target');
+            document.querySelectorAll('.move-highlight, .attack-target, .splash-target').forEach(el => {
+                el.classList.remove('move-highlight', 'attack-target', 'splash-target');
             });
 
             actionMode = 'select_action';
@@ -174,6 +206,17 @@
             // 創建選單
             actionMenu = document.createElement('div');
             actionMenu.className = 'action-menu';
+
+            // 顯示單位名稱
+            const title = document.createElement('div');
+            title.className = 'action-menu-title';
+            title.textContent = UNIT_NAMES[selectedUnit.type];
+            actionMenu.appendChild(title);
+
+            const btnContainer = document.createElement('div');
+            btnContainer.style.display = 'flex';
+            btnContainer.style.gap = '10px';
+            btnContainer.style.justifyContent = 'center';
 
             const moveBtn = document.createElement('button');
             moveBtn.className = 'action-btn action-btn-move';
@@ -188,11 +231,17 @@
             attackBtn.textContent = '攻擊';
             attackBtn.onclick = (e) => {
                 e.stopPropagation();
+                // 檢查炮是否處於冷卻中
+                if (selectedUnit.type === 'can' && selectedUnit.cooldown > 0) {
+                    alert(`炮處於冷卻中 (剩餘 ${selectedUnit.cooldown} 回合)`);
+                    return;
+                }
                 enterAttackMode();
             };
 
-            actionMenu.appendChild(moveBtn);
-            actionMenu.appendChild(attackBtn);
+            btnContainer.appendChild(moveBtn);
+            btnContainer.appendChild(attackBtn);
+            actionMenu.appendChild(btnContainer);
 
             // 定位選單
             const boardContainer = document.querySelector('.board-container');
@@ -215,8 +264,8 @@
             actionMode = 'move';
 
             // 清除之前的高亮（不重新渲染整個棋盤）
-            document.querySelectorAll('.move-highlight, .attack-target, .selected').forEach(el => {
-                el.classList.remove('move-highlight', 'attack-target', 'selected');
+            document.querySelectorAll('.move-highlight, .attack-target, .splash-target, .selected').forEach(el => {
+                el.classList.remove('move-highlight', 'attack-target', 'splash-target', 'selected');
             });
 
             const { x, y } = selectedPos;
@@ -311,8 +360,8 @@
             actionMode = 'attack';
 
             // 清除之前的高亮（不重新渲染整個棋盤）
-            document.querySelectorAll('.move-highlight, .attack-target, .selected').forEach(el => {
-                el.classList.remove('move-highlight', 'attack-target', 'selected');
+            document.querySelectorAll('.move-highlight, .attack-target, .splash-target, .selected').forEach(el => {
+                el.classList.remove('move-highlight', 'attack-target', 'splash-target', 'selected');
             });
 
             const { x, y } = selectedPos;
@@ -346,13 +395,11 @@
             const targetCell = cells.find(el => el.classList.contains('cell'));
 
             // 清除之前的目標高亮
-            document.querySelectorAll('.attack-target').forEach(el => {
-                el.classList.remove('attack-target');
+            document.querySelectorAll('.attack-target, .splash-target').forEach(el => {
+                el.classList.remove('attack-target', 'splash-target');
             });
 
-            let targetX = null;
-            let targetY = null;
-
+            // 高亮邏輯
             if (targetCell) {
                 const tx = parseInt(targetCell.dataset.x);
                 const ty = parseInt(targetCell.dataset.y);
@@ -362,26 +409,35 @@
                 // 如果是射程內的敵方單位，高亮
                 if (targetUnit && targetUnit.team !== selectedUnit.team &&
                     targetUnit.type !== 'obstacle' && dist <= range && dist > 0) {
-                    targetCell.classList.add('attack-target');
-                    targetX = tx;
-                    targetY = ty;
-                } else if (dist <= range && dist > 0) {
-                    // 即使不是敵人，只要在範圍內也顯示線
-                    targetX = tx;
-                    targetY = ty;
+                    targetCell.classList.add('attack-target'); // 主要目標
+
+                    // 濺射傷害檢查 (Mage 或 Can)
+                    if (selectedUnit.type === 'mage' || selectedUnit.type === 'can') {
+                        // 3x3 濺射
+                        for (let dx = -1; dx <= 1; dx++) {
+                            for (let dy = -1; dy <= 1; dy++) {
+                                const sx = tx + dx;
+                                const sy = ty + dy;
+                                if (sx >= 0 && sx < 13 && sy >= 0 && sy < 15) {
+                                    const splashCell = document.querySelector(`.cell[data-x="${sx}"][data-y="${sy}"]`);
+                                    if (splashCell && (dx !== 0 || dy !== 0)) {
+                                        splashCell.classList.add('splash-target');
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
 
-            // 繪製攻擊範圍線（指向目標格子中心）
-            drawAttackRangeLine(targetX, targetY);
+            // 繪製動態攻擊線 (跟隨鼠標)
+            drawDynamicAttackLine(e.clientX, e.clientY);
         }
 
-        // 繪製攻擊範圍線
-        function drawAttackRangeLine(targetX, targetY) {
+        // 繪製動態攻擊範圍線
+        function drawDynamicAttackLine(mouseX, mouseY) {
             const svg = document.getElementById('attackRangeOverlay');
-
-            // 如果沒有有效目標，清除線條
-            if (targetX === null || targetY === null || !selectedPos) {
+            if (!selectedPos) {
                 svg.innerHTML = '';
                 return;
             }
@@ -389,38 +445,61 @@
             const { x, y } = selectedPos;
             const range = UNIT_STATS[selectedUnit.type].rng;
 
-            // 檢查目標是否在射程內（使用Chebyshev distance）
-            const dist = Math.max(Math.abs(targetX - x), Math.abs(targetY - y));
-            if (dist > range || dist === 0) {
-                svg.innerHTML = '';
-                return;
-            }
-
-            // 獲取容器元素 (SVG是相對於此容器定位的)
+            // 獲取容器和棋盤資訊
             const container = document.querySelector('.board-container');
+            const containerRect = container.getBoundingClientRect();
 
             // 獲取起點格子（選中單位）
             const selectedCell = document.querySelector(`.cell[data-x="${x}"][data-y="${y}"]`);
             if (!selectedCell) return;
+            const startRect = selectedCell.getBoundingClientRect();
 
-            // 獲取目標格子
-            const targetCell = document.querySelector(`.cell[data-x="${targetX}"][data-y="${targetY}"]`);
-            if (!targetCell) return;
+            // 計算起點中心（相對於容器）
+            const startX = startRect.left - containerRect.left + startRect.width / 2;
+            const startY = startRect.top - containerRect.top + startRect.height / 2;
 
-            // 獲取容器的位置
-            const containerRect = container.getBoundingClientRect();
+            // 計算鼠標位置（相對於容器）
+            let endX = mouseX - containerRect.left;
+            let endY = mouseY - containerRect.top;
 
-            // 獲取兩個格子的位置
-            const startCellRect = selectedCell.getBoundingClientRect();
-            const endCellRect = targetCell.getBoundingClientRect();
+            // 計算相對於起點的向量
+            let dx = endX - startX;
+            let dy = endY - startY;
 
-            // 計算中心點（相對於容器）
-            const startX = startCellRect.left - containerRect.left + startCellRect.width / 2;
-            const startY = startCellRect.top - containerRect.top + startCellRect.height / 2;
-            const endX = endCellRect.left - containerRect.left + endCellRect.width / 2;
-            const endY = endCellRect.top - containerRect.top + endCellRect.height / 2;
+            // 計算格子大小 (近似值)
+            const cellWidth = startRect.width;
+            const cellHeight = startRect.height; // Should be same as width
 
-            // 繪製SVG線（從選中單位中心到目標格子中心）
+            // 將像素距離轉換為"邏輯距離" (Chebyshev)
+            // 這裡我們用簡單的比例放大：如果滑鼠超過了 (range * cellWidth) 的方形邊界，就截斷
+            // 考慮到 Chebyshev 距離是方形擴散，我們分別限制 X 和 Y 軸
+
+            // 允許稍微超出格子中心到邊緣的距離，所以用 range + 0.5 (覆蓋整個目標格)
+            // 或者嚴格一點，只允許連線到 range 半徑的邊緣
+            const maxDistPixels = (range * cellWidth) + (cellWidth * 0.5); // 讓線頭能碰到最遠格子的中心甚至邊緣
+
+            // 計算目前的 Chebyshev 像素距離
+            // 我們希望限制在以 start 為中心的方形區域內
+            // 方形邊長半徑 = range * cellWidth (大約)
+
+            // 更加精確的算法：
+            // 如果我們把 dx, dy 正規化到 "格子單位"
+            const gridDx = dx / cellWidth;
+            const gridDy = dy / cellHeight;
+
+            // Chebyshev magnitude
+            const magnitude = Math.max(Math.abs(gridDx), Math.abs(gridDy));
+
+            if (magnitude > range) {
+                // 需要縮短
+                const scale = range / magnitude;
+                dx *= scale;
+                dy *= scale;
+                endX = startX + dx;
+                endY = startY + dy;
+            }
+
+            // 繪製SVG線
             svg.innerHTML = `<line class="attack-range-line" x1="${startX}" y1="${startY}" x2="${endX}" y2="${endY}" />`;
         }
 
@@ -465,6 +544,13 @@
                 addLog(`${selectedUnit.team === 'red' ? '紅方' : '藍方'} ${UNIT_NAMES[selectedUnit.type]} ${result.message} 到 (${tx},${ty}) [消耗 ${result.ap_used} AP]`);
                 cancelAction();
                 updateUI();
+
+                // 檢查是否需要自動換回合
+                if (result.auto_turn_end) {
+                    setTimeout(() => {
+                        endTurn(true); // 傳入 true 表示自動換回合
+                    }, 500);
+                }
             } else {
                 alert(result.error);
                 cancelAction();
@@ -482,7 +568,8 @@
                 result.events.forEach(event => {
                     if (event && event.type === 'damage') {
                         const targetUnit = event.unit_id;
-                        const msg = `${selectedUnit.team === 'red' ? '紅方' : '藍方'} ${UNIT_NAMES[selectedUnit.type]} 攻擊 (${event.x},${event.y}) 造成 ${event.damage} 點傷害`;
+                        const protectedTag = event.protected ? ' [將軍保護]' : '';
+                        const msg = `${selectedUnit.team === 'red' ? '紅方' : '藍方'} ${UNIT_NAMES[selectedUnit.type]} 攻擊 (${event.x},${event.y}) 造成 ${event.damage} 點傷害${protectedTag}`;
                         addLog(msg, event.died ? 'death' : 'damage');
 
                         if (event.died) {
@@ -498,6 +585,11 @@
 
                 if (gameState.game_over) {
                     showVictory();
+                } else if (result.auto_turn_end) {
+                    // 自動換回合
+                    setTimeout(() => {
+                        endTurn(true); // 傳入 true 表示自動換回合
+                    }, 500);
                 }
             } else {
                 alert(result.error);
@@ -506,7 +598,7 @@
         }
 
         // 結束回合
-        async function endTurn() {
+        async function endTurn(isAuto = false) {
             cancelAction(); // 清除任何進行中的操作
 
             const result = gameEngine.endTurn();
@@ -517,6 +609,10 @@
                 updateUI();
                 addLog(`===== 回合 ${gameState.turn_count} 開始 =====`);
                 addLog(`${gameState.current_turn === 'red' ? '紅方' : '藍方'} 回合開始`);
+
+                // 顯示中央提示訊息
+                const turnText = gameState.current_turn === 'red' ? '紅方回合' : '藍方回合';
+                showCentralMessage(turnText, 'turn');
             }
         }
 
@@ -552,6 +648,24 @@
             victoryMessage.textContent = `🎉 ${winner} 獲勝！🎉`;
             victoryMessage.style.display = 'block';
             addLog(`========== ${winner} 獲勝！ ==========`, 'death');
+
+            // 顯示中央提示訊息
+            showCentralMessage(`${winner} 勝利！`, 'victory');
+        }
+
+        // 顯示中央提示訊息
+        function showCentralMessage(text, type) {
+            const messageDiv = document.getElementById('centralMessage');
+            messageDiv.textContent = text;
+            messageDiv.className = `central-message ${type}`;
+            messageDiv.style.display = 'flex';
+
+            // 2秒後自動隱藏（勝利訊息除外）
+            if (type !== 'victory') {
+                setTimeout(() => {
+                    messageDiv.style.display = 'none';
+                }, 2000);
+            }
         }
 
         // 添加日誌
