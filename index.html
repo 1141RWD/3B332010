@@ -1,0 +1,560 @@
+<!DOCTYPE html>
+<div class="game-info">
+    <div id="turnIndicator" class="turn-indicator turn-red">紅方回合</div>
+    <div id="apCounter" class="ap-counter">AP: 6</div>
+    <div id="victoryMessage" class="victory-message" style="display: none;"></div>
+</div>
+<div class="controls">
+    <button class="btn-end-turn" onclick="endTurn()">結束回合</button>
+    <button class="btn-reset" onclick="resetGame()">重新開始</button>
+</div>
+</header>
+
+<div class="game-area">
+    <div class="board-container" style="position: relative;">
+        <div id="gameBoard" class="game-board"></div>
+        <svg id="attackRangeOverlay" width="100%" height="100%"></svg>
+    </div>
+
+    <div class="log-panel">
+        <h3>戰鬥紀錄</h3>
+        <div id="logContent" class="log-content"></div>
+    </div>
+</div>
+</div>
+
+<script src="game-logic.js"></script>
+<script>
+    const gameEngine = new GameEngine();
+    let gameState = null;
+    let selectedUnit = null;
+    let selectedPos = null;
+    let actionMode = null; // null, 'select_action', 'move', 'attack'
+    let actionMenu = null;
+    let mouseMoveHandler = null;
+    let boardRect = null;
+
+    // 初始化遊戲
+    function initGame() {
+        gameState = gameEngine.initGameState();
+        renderBoard();
+        updateUI();
+        addLog('遊戲開始！紅方先手');
+    }
+
+    // 渲染棋盤
+    function renderBoard() {
+        const board = document.getElementById('gameBoard');
+        board.innerHTML = '';
+
+        for (let y = 0; y < 15; y++) {
+            for (let x = 0; x < 13; x++) {
+                const cell = document.createElement('div');
+                cell.className = 'cell';
+                cell.dataset.x = x;
+                cell.dataset.y = y;
+
+                const unit = gameState.board[`${x}_${y}`];
+
+                if (unit) {
+                    if (unit.type === 'obstacle') {
+                        cell.classList.add('obstacle');
+                        cell.innerHTML = '🪨';
+                    } else {
+                        cell.classList.add(unit.team + '-unit');
+
+                        const unitType = document.createElement('div');
+                        unitType.className = 'unit-type';
+                        unitType.textContent = UNIT_NAMES[unit.type];
+
+                        const unitHP = document.createElement('div');
+                        unitHP.className = 'unit-hp';
+                        unitHP.textContent = `${unit.hp}/${unit.max_hp}`;
+
+                        const hpBar = document.createElement('div');
+                        hpBar.className = 'hp-bar';
+                        const hpFill = document.createElement('div');
+                        hpFill.className = 'hp-fill';
+                        hpFill.style.width = `${(unit.hp / unit.max_hp) * 100}%`;
+                        hpBar.appendChild(hpFill);
+
+                        cell.appendChild(unitType);
+                        cell.appendChild(unitHP);
+                        cell.appendChild(hpBar);
+                    }
+                }
+
+                cell.onclick = () => handleCellClick(x, y);
+                board.appendChild(cell);
+            }
+        }
+    }
+
+    // 處理格子點擊
+    async function handleCellClick(x, y) {
+        if (gameState.game_over) {
+            alert('遊戲已結束！');
+            return;
+        }
+
+        const unit = gameState.board[`${x}_${y}`];
+
+        // 移動模式：點擊綠色格子移動，其他取消
+        if (actionMode === 'move') {
+            const cell = document.querySelector(`.cell[data-x="${x}"][data-y="${y}"]`);
+            if (cell.classList.contains('move-highlight')) {
+                await performMove(x, y);
+            } else {
+                cancelAction();
+                addLog('取消移動');
+            }
+            return;
+        }
+
+        // 攻擊模式：點擊目標攻擊，其他取消
+        if (actionMode === 'attack') {
+            const cell = document.querySelector(`.cell[data-x="${x}"][data-y="${y}"]`);
+            if (cell.classList.contains('attack-target')) {
+                await performAttack(x, y);
+            } else {
+                cancelAction();
+                addLog('取消攻擊');
+            }
+            return;
+        }
+
+        // 點擊己方單位 -> 顯示操作選單
+        if (unit && unit.team === gameState.current_turn && unit.type !== 'obstacle') {
+            selectedUnit = unit;
+            selectedPos = { x, y };
+            showActionMenu(x, y);
+            addLog(`選擇了 ${unit.team === 'red' ? '紅方' : '藍方'} ${UNIT_NAMES[unit.type]} (${x},${y})`);
+            return;
+        }
+
+        // 點擊其他地方取消選擇
+        if (selectedUnit || actionMode) {
+            cancelAction();
+        }
+    }
+
+    // 顯示操作選單
+    function showActionMenu(x, y) {
+        // 只清除操作狀態，不清除選中的單位信息
+        if (actionMenu) {
+            actionMenu.remove();
+            actionMenu = null;
+        }
+        if (mouseMoveHandler) {
+            document.removeEventListener('mousemove', mouseMoveHandler);
+            mouseMoveHandler = null;
+        }
+        const svg = document.getElementById('attackRangeOverlay');
+        if (svg) svg.innerHTML = '';
+        document.querySelectorAll('.move-highlight, .attack-target').forEach(el => {
+            el.classList.remove('move-highlight', 'attack-target');
+        });
+
+        actionMode = 'select_action';
+        const cell = document.querySelector(`.cell[data-x="${x}"][data-y="${y}"]`);
+        if (cell) cell.classList.add('selected');
+
+        // 創建選單
+        actionMenu = document.createElement('div');
+        actionMenu.className = 'action-menu';
+
+        const moveBtn = document.createElement('button');
+        moveBtn.className = 'action-btn action-btn-move';
+        moveBtn.textContent = '移動';
+        moveBtn.onclick = (e) => {
+            e.stopPropagation();
+            enterMoveMode();
+        };
+
+        const attackBtn = document.createElement('button');
+        attackBtn.className = 'action-btn action-btn-attack';
+        attackBtn.textContent = '攻擊';
+        attackBtn.onclick = (e) => {
+            e.stopPropagation();
+            enterAttackMode();
+        };
+
+        actionMenu.appendChild(moveBtn);
+        actionMenu.appendChild(attackBtn);
+
+        // 定位選單
+        const boardContainer = document.querySelector('.board-container');
+        const cellRect = cell.getBoundingClientRect();
+        const containerRect = boardContainer.getBoundingClientRect();
+
+        actionMenu.style.left = (cellRect.left - containerRect.left + cellRect.width / 2 - 80) + 'px';
+        actionMenu.style.top = (cellRect.top - containerRect.top - 50) + 'px';
+
+        boardContainer.appendChild(actionMenu);
+    }
+
+    // 進入移動模式
+    function enterMoveMode() {
+        if (actionMenu) {
+            actionMenu.remove();
+            actionMenu = null;
+        }
+
+        actionMode = 'move';
+
+        // 清除之前的高亮（不重新渲染整個棋盤）
+        document.querySelectorAll('.move-highlight, .attack-target, .selected').forEach(el => {
+            el.classList.remove('move-highlight', 'attack-target', 'selected');
+        });
+
+        const { x, y } = selectedPos;
+        const cell = document.querySelector(`.cell[data-x="${x}"][data-y="${y}"]`);
+        if (cell) cell.classList.add('selected');
+
+        // 計算花費1AP可達的格子
+        const currentAP = gameState.current_turn === 'red' ? gameState.red_ap : gameState.blue_ap;
+        const apMove = UNIT_STATS[selectedUnit.type].ap_move;
+
+        if (currentAP < apMove) {
+            addLog('AP不足，無法移動');
+            cancelAction();
+            return;
+        }
+
+        let highlightCount = 0;
+
+        // 1. 高亮相鄰8格（基本移動）
+        for (let dx = -1; dx <= 1; dx++) {
+            for (let dy = -1; dy <= 1; dy++) {
+                if (dx === 0 && dy === 0) continue;
+                const nx = x + dx;
+                const ny = y + dy;
+                if (nx >= 0 && nx < 13 && ny >= 0 && ny < 15) {
+                    const targetUnit = gameState.board[`${nx}_${ny}`];
+                    // 空格可移動（1AP），友方可交換（需2AP但先顯示）
+                    if (!targetUnit || (targetUnit.team === selectedUnit.team && targetUnit.type !== 'obstacle')) {
+                        const targetCell = document.querySelector(`.cell[data-x="${nx}"][data-y="${ny}"]`);
+                        if (targetCell) {
+                            targetCell.classList.add('move-highlight');
+                            highlightCount++;
+                        }
+                    }
+                }
+            }
+        }
+
+        // 2. 高亮跳躍移動（跳到直線上連續友方單位的前方一格，最多跳過3個）
+        const jumpDirections = [
+            { dx: 0, dy: 1, name: '下' },
+            { dx: 0, dy: -1, name: '上' },
+            { dx: 1, dy: 0, name: '右' },
+            { dx: -1, dy: 0, name: '左' }
+        ];
+
+        for (let dir of jumpDirections) {
+            // 沿著這個方向尋找連續的友方單位（最多3個）
+            let consecutiveAllies = 0;
+            let checkX = x + dir.dx;
+            let checkY = y + dir.dy;
+
+            // 計算連續的友方單位數量（最多3個）
+            while (checkX >= 0 && checkX < 13 && checkY >= 0 && checkY < 15 && consecutiveAllies < 3) {
+                const checkUnit = gameState.board[`${checkX}_${checkY}`];
+                if (checkUnit && checkUnit.team === selectedUnit.team && checkUnit.type !== 'obstacle') {
+                    consecutiveAllies++;
+                    checkX += dir.dx;
+                    checkY += dir.dy;
+                } else {
+                    break;
+                }
+            }
+
+            // 如果有連續的友方單位，跳到他們的前方一格
+            if (consecutiveAllies > 0) {
+                // checkX, checkY 現在已經是最後一個友方單位的下一格
+                if (checkX >= 0 && checkX < 13 && checkY >= 0 && checkY < 15) {
+                    const targetUnit = gameState.board[`${checkX}_${checkY}`];
+                    // 目標位置必須為空
+                    if (!targetUnit) {
+                        const targetCell = document.querySelector(`.cell[data-x="${checkX}"][data-y="${checkY}"]`);
+                        if (targetCell && !targetCell.classList.contains('move-highlight')) {
+                            targetCell.classList.add('move-highlight');
+                            highlightCount++;
+                        }
+                    }
+                }
+            }
+        }
+
+        addLog('移動模式：點擊綠色格子移動（含跳躍）');
+    }
+
+    // 進入攻擊模式
+    function enterAttackMode() {
+        if (actionMenu) {
+            actionMenu.remove();
+            actionMenu = null;
+        }
+
+        actionMode = 'attack';
+
+        // 清除之前的高亮（不重新渲染整個棋盤）
+        document.querySelectorAll('.move-highlight, .attack-target, .selected').forEach(el => {
+            el.classList.remove('move-highlight', 'attack-target', 'selected');
+        });
+
+        const { x, y } = selectedPos;
+        const cell = document.querySelector(`.cell[data-x="${x}"][data-y="${y}"]`);
+        if (cell) cell.classList.add('selected');
+
+        // 更新棋盤rect
+        const board = document.getElementById('gameBoard');
+        boardRect = board.getBoundingClientRect();
+
+        // 添加鼠標移動監聽
+        mouseMoveHandler = (e) => handleMouseMoveInAttackMode(e);
+        document.addEventListener('mousemove', mouseMoveHandler);
+
+        addLog('攻擊模式：移動鼠標瞄準目標');
+    }
+
+    // 處理攻擊模式下的鼠標移動
+    function handleMouseMoveInAttackMode(e) {
+        if (actionMode !== 'attack' || !selectedPos) return;
+
+        // 每次都重新獲取boardRect，以處理滾動
+        const board = document.getElementById('gameBoard');
+        boardRect = board.getBoundingClientRect();
+
+        const { x, y } = selectedPos;
+        const range = UNIT_STATS[selectedUnit.type].rng;
+
+        // 檢測鼠標下的目標格子
+        const cells = document.elementsFromPoint(e.clientX, e.clientY);
+        const targetCell = cells.find(el => el.classList.contains('cell'));
+
+        // 清除之前的目標高亮
+        document.querySelectorAll('.attack-target').forEach(el => {
+            el.classList.remove('attack-target');
+        });
+
+        let targetX = null;
+        let targetY = null;
+
+        if (targetCell) {
+            const tx = parseInt(targetCell.dataset.x);
+            const ty = parseInt(targetCell.dataset.y);
+            const dist = Math.max(Math.abs(tx - x), Math.abs(ty - y));
+            const targetUnit = gameState.board[`${tx}_${ty}`];
+
+            // 如果是射程內的敵方單位，高亮
+            if (targetUnit && targetUnit.team !== selectedUnit.team &&
+                targetUnit.type !== 'obstacle' && dist <= range && dist > 0) {
+                targetCell.classList.add('attack-target');
+                targetX = tx;
+                targetY = ty;
+            } else if (dist <= range && dist > 0) {
+                // 即使不是敵人，只要在範圍內也顯示線
+                targetX = tx;
+                targetY = ty;
+            }
+        }
+
+        // 繪製攻擊範圍線（指向目標格子中心）
+        drawAttackRangeLine(targetX, targetY);
+    }
+
+    // 繪製攻擊範圍線
+    function drawAttackRangeLine(targetX, targetY) {
+        const svg = document.getElementById('attackRangeOverlay');
+
+        // 如果沒有有效目標，清除線條
+        if (targetX === null || targetY === null || !selectedPos) {
+            svg.innerHTML = '';
+            return;
+        }
+
+        const { x, y } = selectedPos;
+        const range = UNIT_STATS[selectedUnit.type].rng;
+
+        // 檢查目標是否在射程內（使用Chebyshev distance）
+        const dist = Math.max(Math.abs(targetX - x), Math.abs(targetY - y));
+        if (dist > range || dist === 0) {
+            svg.innerHTML = '';
+            return;
+        }
+
+        // 獲取容器元素 (SVG是相對於此容器定位的)
+        const container = document.querySelector('.board-container');
+
+        // 獲取起點格子（選中單位）
+        const selectedCell = document.querySelector(`.cell[data-x="${x}"][data-y="${y}"]`);
+        if (!selectedCell) return;
+
+        // 獲取目標格子
+        const targetCell = document.querySelector(`.cell[data-x="${targetX}"][data-y="${targetY}"]`);
+        if (!targetCell) return;
+
+        // 獲取容器的位置
+        const containerRect = container.getBoundingClientRect();
+
+        // 獲取兩個格子的位置
+        const startCellRect = selectedCell.getBoundingClientRect();
+        const endCellRect = targetCell.getBoundingClientRect();
+
+        // 計算中心點（相對於容器）
+        const startX = startCellRect.left - containerRect.left + startCellRect.width / 2;
+        const startY = startCellRect.top - containerRect.top + startCellRect.height / 2;
+        const endX = endCellRect.left - containerRect.left + endCellRect.width / 2;
+        const endY = endCellRect.top - containerRect.top + endCellRect.height / 2;
+
+        // 繪製SVG線（從選中單位中心到目標格子中心）
+        svg.innerHTML = `<line class="attack-range-line" x1="${startX}" y1="${startY}" x2="${endX}" y2="${endY}" />`;
+    }
+
+    // 取消操作
+    function cancelAction() {
+        actionMode = null;
+
+        if (actionMenu) {
+            actionMenu.remove();
+            actionMenu = null;
+        }
+
+        if (mouseMoveHandler) {
+            document.removeEventListener('mousemove', mouseMoveHandler);
+            mouseMoveHandler = null;
+        }
+
+        const svg = document.getElementById('attackRangeOverlay');
+        if (svg) svg.innerHTML = '';
+
+        selectedUnit = null;
+        selectedPos = null;
+        renderBoard();
+    }
+
+    // 執行移動
+    async function performMove(tx, ty) {
+        const { x, y } = selectedPos;
+        const targetUnit = gameState.board[`${tx}_${ty}`];
+
+        let moveType = 'move';
+        if (targetUnit && targetUnit.team === selectedUnit.team) {
+            moveType = 'swap';
+        } else if (Math.abs(tx - x) > 1 || Math.abs(ty - y) > 1) {
+            moveType = 'jump';
+        }
+
+        const result = gameEngine.executeMove(selectedUnit.id, tx, ty, moveType);
+
+        if (result.success) {
+            gameState = gameEngine.state;
+            addLog(`${selectedUnit.team === 'red' ? '紅方' : '藍方'} ${UNIT_NAMES[selectedUnit.type]} ${result.message} 到 (${tx},${ty}) [消耗 ${result.ap_used} AP]`);
+            cancelAction();
+            updateUI();
+        } else {
+            alert(result.error);
+            cancelAction();
+        }
+    }
+
+    // 執行攻擊
+    async function performAttack(tx, ty) {
+        const result = gameEngine.executeAttack(selectedUnit.id, tx, ty);
+
+        if (result.success) {
+            gameState = gameEngine.state;
+
+            // 處理戰鬥事件
+            result.events.forEach(event => {
+                if (event && event.type === 'damage') {
+                    const targetUnit = event.unit_id;
+                    const msg = `${selectedUnit.team === 'red' ? '紅方' : '藍方'} ${UNIT_NAMES[selectedUnit.type]} 攻擊 (${event.x},${event.y}) 造成 ${event.damage} 點傷害`;
+                    addLog(msg, event.died ? 'death' : 'damage');
+
+                    if (event.died) {
+                        addLog(`單位陣亡！`, 'death');
+                    }
+                }
+            });
+
+            addLog(`消耗 ${result.ap_used} AP`);
+
+            cancelAction();
+            updateUI();
+
+            if (gameState.game_over) {
+                showVictory();
+            }
+        } else {
+            alert(result.error);
+            cancelAction();
+        }
+    }
+
+    // 結束回合
+    async function endTurn() {
+        cancelAction(); // 清除任何進行中的操作
+
+        const result = gameEngine.endTurn();
+
+        if (result.success) {
+            gameState = gameEngine.state;
+            renderBoard();
+            updateUI();
+            addLog(`===== 回合 ${gameState.turn_count} 開始 =====`);
+            addLog(`${gameState.current_turn === 'red' ? '紅方' : '藍方'} 回合開始`);
+        }
+    }
+
+    // 重新開始
+    function resetGame() {
+        if (confirm('確定要重新開始遊戲嗎？')) {
+            cancelAction(); // 清除任何進行中的操作
+            initGame();
+            document.getElementById('logContent').innerHTML = '';
+        }
+    }
+
+    // 更新UI
+    function updateUI() {
+        const turnIndicator = document.getElementById('turnIndicator');
+        const apCounter = document.getElementById('apCounter');
+
+        if (gameState.current_turn === 'red') {
+            turnIndicator.textContent = '紅方回合';
+            turnIndicator.className = 'turn-indicator turn-red';
+            apCounter.textContent = `AP: ${gameState.red_ap}`;
+        } else {
+            turnIndicator.textContent = '藍方回合';
+            turnIndicator.className = 'turn-indicator turn-blue';
+            apCounter.textContent = `AP: ${gameState.blue_ap}`;
+        }
+    }
+
+    // 顯示勝利訊息
+    function showVictory() {
+        const victoryMessage = document.getElementById('victoryMessage');
+        const winner = gameState.winner === 'red' ? '紅方' : '藍方';
+        victoryMessage.textContent = `🎉 ${winner} 獲勝！🎉`;
+        victoryMessage.style.display = 'block';
+        addLog(`========== ${winner} 獲勝！ ==========`, 'death');
+    }
+
+    // 添加日誌
+    function addLog(message, type = 'info') {
+        const logContent = document.getElementById('logContent');
+        const entry = document.createElement('div');
+        entry.className = `log-entry ${type}`;
+        entry.textContent = message;
+        logContent.appendChild(entry);
+        logContent.scrollTop = logContent.scrollHeight;
+    }
+
+    // 頁面載入時初始化
+    window.onload = initGame;
+</script>
+</body>
+
+</html>
