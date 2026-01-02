@@ -108,13 +108,186 @@ body {
 
 @keyframes pulse {
 
+    50% {
+        opacity: 0.6;
+    }
+}
+
+/* ==================== 主選單樣式 ==================== */
+.menu-container {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    background: rgba(0, 0, 0, 0.6);
+    /* 半透明背景讓背後的戰場圖透出來 */
+    backdrop-filter: blur(5px);
+}
+
+.menu-title {
+    font-size: 80px;
+    color: #ffd700;
+    text-shadow: 0 0 20px rgba(255, 215, 0, 0.5),
+        0 0 40px rgba(255, 215, 0, 0.3);
+    margin-bottom: 60px;
+    font-weight: bold;
+    letter-spacing: 5px;
+    animation: titleFloat 3s ease-in-out infinite;
+    text-align: center;
+}
+
+@keyframes titleFloat {
+
     0%,
     100% {
-        opacity: 1;
+        transform: translateY(0);
     }
 
     50% {
-        opacity: 0.7;
+        transform: translateY(-20px);
+    }
+}
+
+.menu-buttons {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    width: 300px;
+}
+
+.menu-btn {
+    padding: 20px;
+    font-size: 24px;
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.05));
+    color: #fff;
+    border: 2px solid rgba(255, 255, 255, 0.2);
+    border-radius: 10px;
+    text-align: center;
+    text-decoration: none;
+    transition: all 0.3s;
+    backdrop-filter: blur(5px);
+    position: relative;
+    overflow: hidden;
+}
+
+.menu-btn:hover:not(.disabled) {
+    background: linear-gradient(135deg, rgba(81, 207, 102, 0.8), rgba(64, 192, 87, 0.8));
+    border-color: #51cf66;
+    transform: scale(1.05);
+    box-shadow: 0 0 20px rgba(81, 207, 102, 0.4);
+}
+
+.menu-btn.disabled {
+    background: rgba(0, 0, 0, 0.3);
+    color: #888;
+    border-color: #444;
+    cursor: not-allowed;
+    pointer-events: none;
+}
+
+
+/* ==================== 攻擊特效 ==================== */
+
+/* 投射物共用樣式 */
+.projectile {
+    position: absolute;
+    width: 40px;
+    height: 40px;
+    z-index: 2000;
+    pointer-events: none;
+    transition: transform 0.05s linear;
+    /* 平滑移動 */
+}
+
+.projectile img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+}
+
+/* 特定投射物調整 */
+.projectile.arrow {
+    width: 30px;
+    height: 30px;
+}
+
+.projectile.fireball {
+    width: 50px;
+    height: 50px;
+    filter: drop-shadow(0 0 5px orange);
+}
+
+.projectile.cannonball {
+    width: 20px;
+    height: 20px;
+}
+
+.projectile.slash {
+    width: 60px;
+    /* 劍氣大一點 */
+    height: 60px;
+    filter: drop-shadow(0 0 5px cyan);
+}
+
+/* 爆炸特效 */
+.effect-explosion {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    z-index: 2000;
+    pointer-events: none;
+    background-image: url('assets/effect_explosion.png');
+    background-size: contain;
+    background-repeat: no-repeat;
+    background-position: center;
+    animation: explosionAnim 0.5s ease-out forwards;
+}
+
+@keyframes explosionAnim {
+    0% {
+        transform: scale(0.5);
+        opacity: 0;
+    }
+
+    20% {
+        transform: scale(1.2);
+        opacity: 1;
+    }
+
+    100% {
+        transform: scale(1.5);
+        opacity: 0;
+    }
+}
+
+/* 劍氣斬擊特效 */
+.effect-slash {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    z-index: 2000;
+    pointer-events: none;
+    background-image: url('assets/effect_slash.png');
+    background-size: contain;
+    background-repeat: no-repeat;
+    background-position: center;
+    animation: slashAnim 0.4s ease-out forwards;
+}
+
+@keyframes slashAnim {
+    0% {
+        transform: scale(0.5) rotate(0deg);
+        opacity: 0;
+    }
+
+    20% {
+        opacity: 1;
+    }
+
+    100% {
+        transform: scale(1.5) translate(20px, 0);
+        opacity: 0;
     }
 }
 
@@ -546,12 +719,117 @@ body {
 
 @keyframes cooldownBlink {
 
-    0%,
-    100% {
-        opacity: 1;
-    }
-
     50% {
         opacity: 0.6;
     }
+}
+
+/* ==================== 主選單樣式 ==================== */
+.menu-container {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    background: rgba(0, 0, 0, 0.6);
+    /* 半透明背景讓背後的戰場圖透出來 */
+    backdrop-filter: blur(5px);
+}
+
+.menu-title {
+    font-size: 80px;
+    color: #ffd700;
+    text-shadow: 0 0 20px rgba(255, 215, 0, 0.5),
+        0 0 40px rgba(255, 215, 0, 0.3);
+    margin-bottom: 60px;
+    font-weight: bold;
+    letter-spacing: 5px;
+    animation: titleFloat 3s ease-in-out infinite;
+}
+
+@keyframes titleFloat {
+
+    0%,
+    100% {
+        transform: translateY(0);
+    }
+
+    50% {
+        transform: translateY(-20px);
+    }
+}
+
+.menu-buttons {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    width: 300px;
+}
+
+.menu-btn {
+    padding: 20px;
+    font-size: 24px;
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.05));
+    color: #fff;
+    border: 2px solid rgba(255, 255, 255, 0.2);
+    border-radius: 10px;
+    text-align: center;
+    text-decoration: none;
+    transition: all 0.3s;
+    backdrop-filter: blur(5px);
+    position: relative;
+    overflow: hidden;
+}
+
+.menu-btn:hover:not(.disabled) {
+    background: linear-gradient(135deg, rgba(81, 207, 102, 0.8), rgba(64, 192, 87, 0.8));
+    border-color: #51cf66;
+    transform: scale(1.05);
+    box-shadow: 0 0 20px rgba(81, 207, 102, 0.4);
+}
+
+.menu-btn.disabled {
+    background: rgba(0, 0, 0, 0.3);
+    color: #888;
+    border-color: #444;
+    cursor: not-allowed;
+    pointer-events: none;
+}
+
+/* Electric Aura Animation */
+@keyframes electricFlow {
+    0% {
+        stroke-dashoffset: 0;
+        opacity: 0.8;
+    }
+
+    50% {
+        opacity: 0.5;
+    }
+
+    100% {
+        stroke-dashoffset: -20;
+        opacity: 0.9;
+    }
+}
+
+.aura-border {
+    fill: none;
+    stroke-width: 2px;
+    filter: url(#trembleFilter);
+    stroke-dasharray: 5 3;
+    /* Dashes: 5px line, 3px gap */
+    stroke-linecap: round;
+    animation: electricFlow 0.5s linear infinite;
+    /* Fast flowing */
+}
+
+.aura-border-red {
+    stroke: #ff6b6b;
+    filter: drop-shadow(0 0 4px #ff6b6b);
+}
+
+.aura-border-blue {
+    stroke: #4dabf7;
+    filter: drop-shadow(0 0 4px #4dabf7);
 }

@@ -32,7 +32,7 @@ class GameEngine {
     }
 
     // ==================== 遊戲狀態初始化 ====================
-    initGameState() {
+    initGameState(customSetup = null) {
         this.state = {
             turn_count: 1,
             current_turn: TEAM_RED,
@@ -43,6 +43,58 @@ class GameEngine {
             board: {}
         };
 
+        // Red Setup
+        if (customSetup && customSetup.red) {
+            this.setupCustomUnits({ red: customSetup.red });
+        } else {
+            this.setupDefaultRed();
+        }
+
+        // Blue Setup
+        if (customSetup && customSetup.blue) {
+            this.setupCustomUnits({ blue: customSetup.blue });
+        } else {
+            this.setupDefaultBlue();
+        }
+
+        // ==================== 障礙物 (石頭) ====================
+        // 左側石頭 (3×2): X=2-4, Y=7-8
+        this.state.board['2_7'] = { type: 'obstacle' };
+        this.state.board['3_7'] = { type: 'obstacle' };
+        this.state.board['4_7'] = { type: 'obstacle' };
+        this.state.board['2_8'] = { type: 'obstacle' };
+        this.state.board['3_8'] = { type: 'obstacle' };
+        this.state.board['4_8'] = { type: 'obstacle' };
+
+        // 右側石頭 (3×2): X=8-10, Y=6-7
+        this.state.board['8_6'] = { type: 'obstacle' };
+        this.state.board['9_6'] = { type: 'obstacle' };
+        this.state.board['10_6'] = { type: 'obstacle' };
+        this.state.board['8_7'] = { type: 'obstacle' };
+        this.state.board['9_7'] = { type: 'obstacle' };
+        this.state.board['10_7'] = { type: 'obstacle' };
+
+        return this.state;
+    }
+
+    setupCustomUnits(setup) {
+        // Red Setup
+        if (setup.red) {
+            setup.red.forEach((unit, index) => {
+                const id = `r_${unit.type}${index}`;
+                this.state.board[`${unit.x}_${unit.y}`] = this.createUnit(id, unit.type, TEAM_RED);
+            });
+        }
+        // Blue Setup
+        if (setup.blue) {
+            setup.blue.forEach((unit, index) => {
+                const id = `b_${unit.type}${index}`;
+                this.state.board[`${unit.x}_${unit.y}`] = this.createUnit(id, unit.type, TEAM_BLUE);
+            });
+        }
+    }
+
+    setupDefaultRed() {
         // ==================== 紅方單位 (上方) ====================
         // Y=0: 王在中央
         this.state.board['6_0'] = this.createUnit('r_king', 'king', TEAM_RED);
@@ -73,7 +125,9 @@ class GameEngine {
 
         // Y=3: 中間一個兵
         this.state.board['6_3'] = this.createUnit('r_sol10', 'sol', TEAM_RED);
+    }
 
+    setupDefaultBlue() {
         // ==================== 藍方單位 (下方) ====================
         // Y=11: 中間一個兵
         this.state.board['6_11'] = this.createUnit('b_sol10', 'sol', TEAM_BLUE);
@@ -104,26 +158,9 @@ class GameEngine {
 
         // Y=14: 王在中央
         this.state.board['6_14'] = this.createUnit('b_king', 'king', TEAM_BLUE);
-
-        // ==================== 障礙物 (石頭) ====================
-        // 左側石頭 (3×2): X=2-4, Y=7-8
-        this.state.board['2_7'] = { type: 'obstacle' };
-        this.state.board['3_7'] = { type: 'obstacle' };
-        this.state.board['4_7'] = { type: 'obstacle' };
-        this.state.board['2_8'] = { type: 'obstacle' };
-        this.state.board['3_8'] = { type: 'obstacle' };
-        this.state.board['4_8'] = { type: 'obstacle' };
-
-        // 右側石頭 (3×2): X=8-10, Y=6-7
-        this.state.board['8_6'] = { type: 'obstacle' };
-        this.state.board['9_6'] = { type: 'obstacle' };
-        this.state.board['10_6'] = { type: 'obstacle' };
-        this.state.board['8_7'] = { type: 'obstacle' };
-        this.state.board['9_7'] = { type: 'obstacle' };
-        this.state.board['10_7'] = { type: 'obstacle' };
-
-        return this.state;
     }
+
+
 
     createUnit(id, type, team) {
         const stats = UNIT_STATS[type];
@@ -134,7 +171,10 @@ class GameEngine {
             hp: stats.hp,
             max_hp: stats.hp,
             attacks_used: 0,
-            cooldown: 0  // 冷卻回合數（用於炮）
+            cooldown: 0,  // 冷卻回合數（用於炮）
+            aura_active: false, // 將軍減傷光環是否開啟
+            aura_turns: 0,      // 光環剩餘回合數
+            aura_cooldown: 0    // 光環冷卻回合數
         };
     }
 
@@ -162,21 +202,53 @@ class GameEngine {
         return x >= 0 && x < BOARD_COLS && y >= 0 && y < BOARD_ROWS;
     }
 
-    // 檢查是否在己方將軍的保護範圍內（3x3，不含將軍自身）
+    // 檢查是否在己方將軍的保護範圍內（主動技能 5x5，不含將軍自身）
     isInGeneralProtection(x, y, team) {
         // 尋找己方將軍位置
         for (const [pos, unit] of Object.entries(this.state.board)) {
-            if (unit.type === 'gen' && unit.team === team) {
+            if (unit.type === 'gen' && unit.team === team && unit.aura_active) {
                 const [gx, gy] = pos.split('_').map(Number);
-                // 檢查是否在將軍周圍3x3範圍內（不含將軍自身）
+                // 檢查是否在將軍周圍 5x5 範圍內（半徑 2，不含將軍自身）
                 const dx = Math.abs(x - gx);
                 const dy = Math.abs(y - gy);
-                if (dx <= 1 && dy <= 1 && !(dx === 0 && dy === 0)) {
+                if (dx <= 2 && dy <= 2 && !(dx === 0 && dy === 0)) {
                     return true;
                 }
             }
         }
         return false;
+    }
+
+    // ==================== 技能邏輯 ====================
+    activateAura(uid) {
+        const pos = this.findUnitPosition(uid);
+        if (!pos) return { success: false, error: '找不到單位' };
+
+        const [sx, sy] = pos;
+        const unit = this.getUnitAt(sx, sy);
+
+        if (unit.type !== 'gen') return { success: false, error: '只有將軍可以使用此技能' };
+        if (unit.aura_active) return { success: false, error: '減傷領域已經開啟' };
+        if (unit.aura_cooldown > 0) return { success: false, error: `技能冷卻中 (剩餘 ${unit.aura_cooldown} 回合)` };
+
+        const currentAP = this.state.current_turn === TEAM_RED ? this.state.red_ap : this.state.blue_ap;
+        if (currentAP < 2) return { success: false, error: 'AP 不足 (需要 2 AP)' };
+
+        // 消耗 AP 並開啟技能
+        if (this.state.current_turn === TEAM_RED) {
+            this.state.red_ap -= 2;
+        } else {
+            this.state.blue_ap -= 2;
+        }
+
+        unit.aura_active = true;
+        unit.aura_turns = 3;
+
+        // 檢查是否需要自動換回合
+        const remainingAP = this.state.current_turn === TEAM_RED ? this.state.red_ap : this.state.blue_ap;
+        const auto_turn_end = remainingAP === 0;
+
+        return { success: true, message: '開啟了減傷領域 (持續3回合)', ap_used: 2, auto_turn_end: auto_turn_end };
     }
 
     // ==================== 移動邏輯 ====================
@@ -421,30 +493,63 @@ class GameEngine {
         const remainingAP = this.state.current_turn === TEAM_RED ? this.state.red_ap : this.state.blue_ap;
         const auto_turn_end = remainingAP === 0;
 
-        return { success: true, events: events, ap_used: stats.ap_atk, auto_turn_end: auto_turn_end };
+        return {
+            success: true,
+            events: events,
+            ap_used: stats.ap_atk,
+            auto_turn_end: auto_turn_end,
+            final_x: tx,
+            final_y: ty
+        };
     }
 
     checkLineOfSight(attacker, x1, y1, x2, y2) {
         const dx = x2 - x1;
         const dy = y2 - y1;
-        const steps = Math.max(Math.abs(dx), Math.abs(dy));
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        // 增加採樣密度，每 0.5 格檢查一次，以確保不漏掉角落
+        const steps = Math.ceil(dist * 2);
 
         for (let i = 1; i < steps; i++) {
-            const checkX = x1 + Math.round(dx * i / steps);
-            const checkY = y1 + Math.round(dy * i / steps);
+            const t = i / steps;
+            const preciseX = x1 + dx * t;
+            const preciseY = y1 + dy * t;
 
-            const obstacle = this.getUnitAt(checkX, checkY);
-            if (obstacle !== null) {
-                // 弓箭手例外：可穿透相鄰友方單位
-                if (attacker.type === 'arc' &&
-                    obstacle.team &&
-                    obstacle.team === attacker.team &&
-                    this.distance(x1, y1, checkX, checkY) <= 1) {
-                    continue;
+            // 檢查所有可能接觸到的格子（針對 .5 的情況）
+            const checkPoints = [];
+
+            // 如果座標接近整數 (誤差 0.01 內)，只檢查該座標
+            // 如果座標接近 .5 (誤差 0.01 內)，檢查兩邊
+            const isHalfX = Math.abs(preciseX - Math.floor(preciseX) - 0.5) < 0.01;
+            const isHalfY = Math.abs(preciseY - Math.floor(preciseY) - 0.5) < 0.01;
+
+            const xIndices = isHalfX ? [Math.floor(preciseX), Math.ceil(preciseX)] : [Math.round(preciseX)];
+            const yIndices = isHalfY ? [Math.floor(preciseY), Math.ceil(preciseY)] : [Math.round(preciseY)];
+
+            for (const cx of xIndices) {
+                for (const cy of yIndices) {
+                    if (cx === x1 && cy === y1) continue; // 忽略起點
+                    if (cx === x2 && cy === y2) continue; // 忽略終點
+
+                    checkPoints.push({ x: cx, y: cy });
                 }
+            }
 
-                // 被阻擋
-                return { clear: false, blocked_x: checkX, blocked_y: checkY };
+            // 檢查這些點是否有障礙物
+            for (const p of checkPoints) {
+                const obstacle = this.getUnitAt(p.x, p.y);
+                if (obstacle !== null) {
+                    // 弓箭手例外：可穿透相鄰友方單位
+                    if (attacker.type === 'arc' &&
+                        obstacle.team &&
+                        obstacle.team === attacker.team &&
+                        this.distance(x1, y1, p.x, p.y) <= 1) {
+                        continue;
+                    }
+
+                    // 被阻擋
+                    return { clear: false, blocked_x: p.x, blocked_y: p.y };
+                }
             }
         }
 
@@ -493,12 +598,7 @@ class GameEngine {
 
     // ==================== 結束回合 ====================
     endTurn() {
-        // 減少當前回合方所有單位的冷卻時間
-        for (const unit of Object.values(this.state.board)) {
-            if (unit.team === this.state.current_turn && unit.cooldown > 0) {
-                unit.cooldown--;
-            }
-        }
+        const expiredEffects = [];
 
         // 切換回合
         this.state.current_turn = this.state.current_turn === TEAM_RED ? TEAM_BLUE : TEAM_RED;
@@ -514,8 +614,34 @@ class GameEngine {
             }
         }
 
+        // 減少（新回合方）所有單位的冷卻時間和持續時間
+        // "下一個自己的回合冷卻減一" -> 現在是新回合的開始
+        for (const unit of Object.values(this.state.board)) {
+            if (unit.team === this.state.current_turn) {
+                if (unit.cooldown > 0) {
+                    unit.cooldown--;
+                }
+                // 減少光環持續時間
+                if (unit.aura_active) {
+                    unit.aura_turns--;
+                    if (unit.aura_turns <= 0) {
+                        unit.aura_active = false;
+                        unit.aura_cooldown = 2; // 技能結束後進入 2 回合冷卻
+                        expiredEffects.push({
+                            type: 'aura_end',
+                            unit_type: unit.type,
+                            team: unit.team,
+                            message: '減傷領域已結束'
+                        });
+                    }
+                } else if (unit.aura_cooldown > 0) {
+                    unit.aura_cooldown--;
+                }
+            }
+        }
+
         this.state.turn_count++;
 
-        return { success: true, message: '回合結束' };
+        return { success: true, message: '回合結束', expired_effects: expiredEffects };
     }
 }

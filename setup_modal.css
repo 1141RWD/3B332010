@@ -1,0 +1,119 @@
+/* Game Setup Modal Styles */
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.85);
+    z-index: 9999;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    backdrop-filter: blur(5px);
+}
+
+.setup-modal {
+    background: #212529;
+    border: 2px solid gold;
+    border-radius: 15px;
+    width: 500px;
+    max-width: 90%;
+    padding: 30px;
+    box-shadow: 0 0 50px rgba(0, 0, 0, 0.8);
+    text-align: center;
+    color: #fff;
+    animation: zoomIn 0.3s;
+}
+
+.setup-modal h2 {
+    color: #ffd700;
+    margin-bottom: 20px;
+    font-size: 28px;
+    border-bottom: 1px solid #444;
+    padding-bottom: 15px;
+}
+
+.setup-step {
+    display: none;
+    /* Managed by JS */
+}
+
+.setup-step.active {
+    display: block;
+    animation: fadeIn 0.3s;
+}
+
+.formation-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    max-height: 300px;
+    overflow-y: auto;
+    margin-bottom: 20px;
+    border: 1px solid #444;
+    border-radius: 5px;
+    padding: 10px;
+    background: #1a1a1a;
+}
+
+.formation-option {
+    padding: 15px;
+    background: #333;
+    border: 2px solid transparent;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s;
+    text-align: left;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.formation-option:hover {
+    background: #444;
+}
+
+.formation-option.selected {
+    border-color: #51cf66;
+    background: rgba(81, 207, 102, 0.2);
+}
+
+.btn-confirm {
+    padding: 12px 30px;
+    background: #51cf66;
+    color: white;
+    font-size: 18px;
+    font-weight: bold;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: all 0.2s;
+    margin-top: 10px;
+}
+
+.btn-confirm:hover {
+    transform: scale(1.05);
+    background: #40c057;
+}
+
+.btn-confirm:disabled {
+    background: #555;
+    cursor: not-allowed;
+    opacity: 0.7;
+    transform: none;
+}
+
+.player-title-red {
+    color: #ff6b6b;
+    font-size: 24px;
+    margin-bottom: 15px;
+    font-weight: bold;
+}
+
+.player-title-blue {
+    color: #4dabf7;
+    font-size: 24px;
+    margin-bottom: 15px;
+    font-weight: bold;
+}

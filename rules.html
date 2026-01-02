@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Antigravity Tactics - 遊戲規則</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="rules_layout.css">
+    <style>
+        body {
+            overflow: hidden;
+            /* Prevent body scroll, handle in containers */
+            background-image: url('assets/battlefield_bg.png');
+            background-size: cover;
+            background-position: center;
+            background-attachment: fixed;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="back-btn-container">
+        <a href="index.html" class="menu-btn" style="padding: 10px 20px; font-size: 16px;">回主選單</a>
+    </div>
+
+    <!-- Main Container -->
+    <div class="rules-container">
+        <div class="main-frame">
+
+            <!-- VIEW 1: Rules Text -->
+            <div id="rulesSection" class="rules-section">
+                <h2>歡迎來到異界戰棋 遊戲規則如下</h2>
+                <div class="rules-text">
+                    棋盤大小為13(寬)*15(長)
+                    角色攻擊方式為以角色為中心點向外延伸該角色的直線射程內所能碰到的角色若一條直線上有重疊兩種以上的單位則攻擊只能直線內離角色最近的單位
+                    這遊戲具有友軍傷害且沒有減傷
+                    若移動時前方有己方單位存在可選擇花費2AP交換位置或花費一AP"跳過"前方單位至更前面一格若前方 為一連串單位則判定 若全為己方單位則可連跳並且無額外花費最多三格 若有敵方單位或為地圖邊界則無法越過
+                    只能直線連跳
+                    雙方擁有一樣的棋子
+                    每人每回合有6AP可動 攻擊為2AP移動為1AP
+                </div>
+                <button class="confirm-btn" onclick="showGallery()">確定</button>
+            </div>
+
+            <!-- VIEW 2: Gallery Split View -->
+            <div id="gallerySection" class="gallery-section">
+                <!-- TOP: List -->
+                <div class="gallery-top">
+                    <!-- Cards will be populated here statically or dynamically -->
+                    <div class="gallery-card" onclick="selectUnit('arc', this)">
+                        <img src="assets/arc.png">
+                        <span>弓箭手</span>
+                    </div>
+                    <div class="gallery-card" onclick="selectUnit('mage', this)">
+                        <img src="assets/mage.png">
+                        <span>法師</span>
+                    </div>
+                    <div class="gallery-card" onclick="selectUnit('gen', this)">
+                        <img src="assets/gen.png">
+                        <span>將軍</span>
+                    </div>
+                    <div class="gallery-card" onclick="selectUnit('sol', this)">
+                        <img src="assets/sol.png">
+                        <span>士兵</span>
+                    </div>
+                    <div class="gallery-card" onclick="selectUnit('can', this)">
+                        <img src="assets/can.png">
+                        <span>炮</span>
+                    </div>
+                    <div class="gallery-card" onclick="selectUnit('king', this)">
+                        <img src="assets/king.png">
+                        <span>王</span>
+                    </div>
+                </div>
+
+                <!-- BOTTOM: Detail -->
+                <div class="gallery-bottom" id="detailPanel">
+                    <p style="text-align: center; width: 100%; color: #888;">請點選上方單位查看詳細資訊</p>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <script>
+        const unitData = {
+            'arc': {
+                name: '弓箭手',
+                img: 'assets/arc.png',
+                desc: `<strong>血量：</strong>5<br><strong>傷害：</strong>3<br><strong>射程：</strong>5格<br><br>弓箭手射擊時，若射擊路徑上的己方單位位於弓箭手周圍 3x3 範圍內（即相鄰一格），則視為透明（可穿透且不造成誤傷）。<br>每回合只能攻擊兩次。`
+            },
+            'mage': {
+                name: '法師',
+                img: 'assets/mage.png',
+                desc: `<strong>血量：</strong>6<br><strong>傷害：</strong>4<br><strong>射程：</strong>4格<br><br>命中敵人後3*3的範圍內受到2滴血的濺射傷害(友軍為1滴)。<br>攻擊軌跡可越過己方單位。<br>每回合只能攻擊兩次。`
+            },
+            'gen': {
+                name: '將軍',
+                img: 'assets/gen.png',
+                desc: `<strong>血量：</strong>15<br><strong>傷害：</strong>5<br><strong>射程：</strong>1格<br><br>開啟主動技後消耗2AP，將軍以自身為中心5*5範圍內的己方單位受傷害減半(小數點四捨五入)，傷害最低為一。<br>結束後進入兩回合冷卻。`
+            },
+            'sol': {
+                name: '士兵',
+                img: 'assets/sol.png',
+                desc: `<strong>血量：</strong>8<br><strong>傷害：</strong>3<br><strong>射程：</strong>1格`
+            },
+            'can': {
+                name: '炮',
+                img: 'assets/can.png',
+                desc: `<strong>血量：</strong>4<br><strong>傷害：</strong>8<br><strong>射程：</strong>7格<br><br>命中後對3*3範圍造成3濺射傷害。<br>攻擊一次需花費4AP，移動一次需花費2AP。<br>攻擊完後有三回合冷卻。`
+            },
+            'king': {
+                name: '王',
+                img: 'assets/king.png',
+                desc: `<strong>血量：</strong>20<br><strong>傷害：</strong>10<br><strong>射程：</strong>1格`
+            }
+        };
+
+        function showGallery() {
+            document.getElementById('rulesSection').style.display = 'none';
+            // Use flex for gallerySection
+            const gallery = document.getElementById('gallerySection');
+            gallery.style.display = 'flex';
+            // Simple fade in
+            gallery.style.opacity = 0;
+            gallery.style.transition = 'opacity 0.5s';
+            setTimeout(() => gallery.style.opacity = 1, 10);
+        }
+
+        function selectUnit(type, cardElement) {
+            // Updated active state style
+            document.querySelectorAll('.gallery-card').forEach(c => c.classList.remove('active'));
+            if (cardElement) cardElement.classList.add('active');
+
+            const data = unitData[type];
+            if (!data) return;
+
+            const panel = document.getElementById('detailPanel');
+            panel.innerHTML = `
+                <img src="${data.img}" class="detail-view-img">
+                <div class="detail-view-content">
+                    <h2>${data.name}</h2>
+                    <p>${data.desc}</p>
+                </div>
+            `;
+            // Add slide animation
+            panel.style.animation = 'none';
+            panel.offsetHeight; /* trigger reflow */
+            panel.style.animation = 'fadeIn 0.3s';
+        }
+    </script>
+</body>
+
+</html>

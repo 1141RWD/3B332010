@@ -1,0 +1,17 @@
+<svg width="60" height="60" viewBox="0 0 60 60" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- The slash is a vertical curve ) moving to the right -->
+  <!-- Viewport is 60x60. Center 30,30. -->
+  
+  <!-- Outer Glow / Front Edge -->
+  <!-- Curve from Top(30, 5) to Bottom(30, 55), bulging to Right(55, 30) -->
+  <path d="M30 5 Q 55 30, 30 55" stroke="cyan" stroke-width="6" stroke-linecap="round" stroke-opacity="0.5" fill="none" filter="drop-shadow(0 0 8px cyan)"/>
+  
+  <!-- Main Body (White core) -->
+  <!-- Slightly inside -->
+  <path d="M25 10 Q 45 30, 25 50" stroke="white" stroke-width="3" stroke-linecap="round" fill="none"/>
+  
+  <!-- Trailing Edge (Inner detail) -->
+  <!-- Curve from Top(30, 5) to Bottom(30, 55), bulging to Left(10, 30) -> Creating a crescent shape -->
+  <!-- Wait, simple strokes are easier for "Slash" effect -->
+  
+</svg>

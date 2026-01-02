@@ -1,0 +1,12 @@
+<svg width="60" height="20" viewBox="0 0 60 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Thicker Shaft for better visibility on rotation -->
+  <!-- Shaft: Length 45. x=7.5, y=8. Height 4. Center y=10. -->
+  <rect x="7.5" y="8" width="45" height="4" fill="#8B4513"/>
+  
+  <!-- Arrowhead: Tip at 52.5. Base at 42.5. -->
+  <path d="M52.5 10 L42.5 4 V16 Z" fill="#A9A9A9" stroke="#696969" stroke-width="1"/>
+  
+  <!-- Fletching -->
+  <path d="M7.5 10 L2.5 4 H7.5 L12.5 10 L7.5 16 H2.5 L7.5 10 Z" fill="#F5F5DC" stroke="#DEB887" stroke-width="1"/>
+  <path d="M14.5 10 L9.5 4 H14.5 L19.5 10 L14.5 16 H9.5 L14.5 10 Z" fill="#F5F5DC" stroke="#DEB887" stroke-width="1"/>
+</svg>

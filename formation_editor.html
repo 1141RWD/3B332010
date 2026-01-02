@@ -1,0 +1,626 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Antigravity Tactics - 布陣編輯器 v1.3</title>
+    <link rel="stylesheet" href="styles.css?v=1.3">
+    <style>
+        body {
+            /* Reuse battlefield background but maybe darker/different overlay */
+            background-color: #212529;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            overflow-y: auto;
+        }
+
+        .editor-container {
+            display: flex;
+            gap: 40px;
+            margin-top: 40px;
+            align-items: flex-start;
+        }
+
+        /* Palette Section */
+        .palette {
+            background: rgba(0, 0, 0, 0.8);
+            padding: 20px;
+            border: 2px solid gold;
+            border-radius: 10px;
+            width: 250px;
+        }
+
+        .palette h2 {
+            color: #ffd700;
+            text-align: center;
+            margin-bottom: 20px;
+            border-bottom: 1px solid #555;
+            padding-bottom: 10px;
+        }
+
+        .unit-item {
+            display: flex;
+            align-items: center;
+            margin-bottom: 15px;
+            padding: 10px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 5px;
+            cursor: pointer;
+            transition: all 0.2s;
+            border: 2px solid transparent;
+        }
+
+        .unit-item:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        .unit-item.selected {
+            border-color: #51cf66;
+            background: rgba(81, 207, 102, 0.2);
+        }
+
+        .unit-item.disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            border-color: transparent;
+        }
+
+        .unit-item img {
+            width: 40px;
+            height: 40px;
+            margin-right: 15px;
+            object-fit: contain;
+        }
+
+        .unit-info {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .unit-name {
+            font-weight: bold;
+            color: #eee;
+        }
+
+        .unit-count {
+            font-size: 12px;
+            color: #aaa;
+        }
+
+        /* Grid Section */
+        .grid-area {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .grid-label {
+            color: #eee;
+            margin-bottom: 10px;
+            font-size: 18px;
+            font-weight: bold;
+        }
+
+        .formation-grid {
+            display: grid;
+            grid-template-columns: repeat(13, 50px);
+            grid-template-rows: repeat(4, 50px);
+            gap: 2px;
+            background: #333;
+            padding: 5px;
+            border: 2px solid #555;
+            margin-bottom: 20px;
+        }
+
+        .grid-cell {
+            width: 50px;
+            height: 50px;
+            background: #2d2d2d;
+            border: 1px solid #444;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+            position: relative;
+        }
+
+        .grid-cell:hover {
+            background: #3d3d3d;
+            border-color: #666;
+        }
+
+        .grid-cell.selected-unit {
+            background: rgba(81, 207, 102, 0.4);
+            border: 2px solid #51cf66;
+            box-shadow: 0 0 10px rgba(81, 207, 102, 0.6);
+        }
+
+        .grid-cell img {
+            width: 40px;
+            height: 40px;
+            pointer-events: none;
+        }
+
+        /* Controls */
+        .controls-panel {
+            background: rgba(0, 0, 0, 0.8);
+            padding: 20px;
+            border-radius: 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            width: 300px;
+        }
+
+        .controls-panel h3 {
+            color: #fff;
+            border-bottom: 1px solid #555;
+            padding-bottom: 10px;
+            margin-bottom: 5px;
+        }
+
+        .input-group {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+
+        .input-group label {
+            color: #ccc;
+            font-size: 14px;
+        }
+
+        .input-group input {
+            padding: 8px;
+            border-radius: 5px;
+            border: 1px solid #555;
+            background: #222;
+            color: #fff;
+        }
+
+        .action-buttons {
+            display: flex;
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        .btn {
+            padding: 10px 15px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: bold;
+            flex: 1;
+            transition: all 0.2s;
+        }
+
+        .btn-save {
+            background: #51cf66;
+            color: white;
+        }
+
+        .btn-save:hover {
+            background: #40c057;
+        }
+
+        .btn-clear {
+            background: #ff6b6b;
+            color: white;
+        }
+
+        .btn-clear:hover {
+            background: #fa5252;
+        }
+
+        .btn-load {
+            background: #339af0;
+            color: white;
+        }
+
+        .btn-load:hover {
+            background: #228be6;
+        }
+
+        .back-link {
+            margin-top: 20px;
+            text-decoration: none;
+            color: #aaa;
+            font-size: 14px;
+        }
+
+        .back-link:hover {
+            color: #fff;
+        }
+
+        /* Saved List */
+        .saved-list {
+            max-height: 200px;
+            overflow-y: auto;
+            border: 1px solid #555;
+            background: #222;
+            border-radius: 5px;
+            margin-top: 10px;
+        }
+
+        .saved-item {
+            padding: 8px;
+            border-bottom: 1px solid #444;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            color: #ddd;
+            cursor: pointer;
+        }
+
+        .saved-item:hover {
+            background: #333;
+        }
+
+        .saved-item span {
+            font-size: 14px;
+        }
+
+        .delete-icon {
+            color: #ff6b6b;
+            font-weight: bold;
+            padding: 0 5px;
+        }
+
+        .delete-icon:hover {
+            color: red;
+        }
+    </style>
+</head>
+
+<body>
+
+    <h1 style="color: #ffd700; margin-top: 20px;">布陣編輯器</h1>
+
+    <div class="editor-container">
+        <!-- LEFT: Palette -->
+        <div class="palette">
+            <h2>可選兵種</h2>
+            <div id="paletteList"></div>
+        </div>
+
+        <!-- CENTER: Grid -->
+        <div class="grid-area">
+            <div class="grid-label">佈署區域 (13 x 4)</div>
+            <div class="formation-grid" id="grid"></div>
+            <div style="color: #aaa; font-size: 14px;">左劍點擊放置，右鍵點擊移除</div>
+        </div>
+
+        <!-- RIGHT: Controls -->
+        <div class="controls-panel">
+            <h3>儲存管理</h3>
+            <div class="input-group">
+                <label>陣型名稱</label>
+                <input type="text" id="formationName" placeholder="例如：防守陣型 A">
+            </div>
+            <div class="action-buttons">
+                <button class="btn btn-save" onclick="saveFormation()">儲存</button>
+                <button class="btn btn-clear" onclick="clearGrid()">清空</button>
+            </div>
+
+            <h3 style="margin-top: 20px;">已存陣型</h3>
+            <div class="saved-list" id="savedList">
+                <!-- JS Populated -->
+            </div>
+
+            <a href="index.html" class="back-link">← 回到主選單</a>
+        </div>
+    </div>
+
+    <script>
+        // Config
+        const UNIT_LIMITS = {
+            'king': 1,
+            'gen': 1,
+            'sol': 10,
+            'arc': 4,
+            'mage': 4,
+            'can': 2
+        };
+
+        const UNIT_DATA = {
+            'king': { name: '國王', img: 'assets/king.png' },
+            'gen': { name: '將軍', img: 'assets/gen.png' },
+            'sol': { name: '士兵', img: 'assets/sol.png' },
+            'arc': { name: '弓箭手', img: 'assets/arc.png' },
+            'mage': { name: '法師', img: 'assets/mage.png' },
+            'can': { name: '炮', img: 'assets/can.png' }
+        };
+
+        // State
+        let selectedType = null; // Palette selection
+        let selectedGridUnit = null; // Grid selection for moving {x, y}
+        let placedUnits = []; // { x, y, type }
+
+        // Init
+        window.onload = function () {
+            initGrid();
+            updatePalette();
+            loadSavedList();
+        };
+
+        function initGrid() {
+            const grid = document.getElementById('grid');
+            grid.innerHTML = '';
+            for (let y = 0; y < 4; y++) {
+                for (let x = 0; x < 13; x++) {
+                    const cell = document.createElement('div');
+                    cell.className = 'grid-cell';
+                    cell.dataset.x = x;
+                    cell.dataset.y = y;
+                    cell.onclick = () => onCellClick(x, y);
+                    cell.oncontextmenu = (e) => { e.preventDefault(); removeUnit(x, y); };
+                    grid.appendChild(cell);
+                }
+            }
+        }
+
+        function updatePalette() {
+            const list = document.getElementById('paletteList');
+            list.innerHTML = '';
+
+            // Count current placed units
+            const placedCounts = {};
+            Object.keys(UNIT_LIMITS).forEach(k => placedCounts[k] = 0);
+            placedUnits.forEach(u => placedCounts[u.type]++);
+
+            Object.keys(UNIT_LIMITS).forEach(type => {
+                const limit = UNIT_LIMITS[type];
+                const current = placedCounts[type];
+                const remaining = limit - current;
+                const info = UNIT_DATA[type];
+
+                const div = document.createElement('div');
+                div.className = `unit-item ${selectedType === type ? 'selected' : ''} ${remaining <= 0 ? 'disabled' : ''}`;
+
+                // Clicking palette item toggles it
+                div.onclick = () => {
+                    if (remaining > 0) {
+                        if (selectedType === type) {
+                            selectedType = null; // Toggle off
+                        } else {
+                            selectedType = type;
+                            selectedGridUnit = null; // Clear grid selection if picking new unit
+                        }
+                        updatePalette();
+                        renderGrid(); // To clear grid selection visuals
+                    }
+                };
+
+                div.innerHTML = `
+                    <img src="${info.img}">
+                    <div class="unit-info">
+                        <span class="unit-name">${info.name}</span>
+                        <span class="unit-count">剩餘: ${remaining} / ${limit}</span>
+                    </div>
+                `;
+                list.appendChild(div);
+            });
+        }
+
+        function onCellClick(x, y) {
+            // Ensure types are numbers
+            x = parseInt(x);
+            y = parseInt(y);
+            console.log(`Clicked cell: ${x}, ${y}. SelectedType: ${selectedType}. SelectedGridUnit:`, selectedGridUnit);
+
+            const existingIdx = placedUnits.findIndex(u => u.x === x && u.y === y);
+            const existingUnit = existingIdx !== -1 ? placedUnits[existingIdx] : null;
+
+            // Priority 1: Move Unit (If unit already selected)
+            if (selectedGridUnit) {
+                // Clicking the SAME unit again -> Deselect
+                if (selectedGridUnit.x === x && selectedGridUnit.y === y) {
+                    selectedGridUnit = null;
+                    renderGrid();
+                    return;
+                }
+
+                if (!existingUnit) {
+                    // Move to empty
+                    const unitIdx = placedUnits.findIndex(u => u.x === selectedGridUnit.x && u.y === selectedGridUnit.y);
+                    if (unitIdx !== -1) {
+                        console.log('Moving unit from', selectedGridUnit, 'to', { x, y });
+                        placedUnits[unitIdx].x = x;
+                        placedUnits[unitIdx].y = y;
+                        selectedGridUnit = null;
+                        renderGrid();
+                        updatePalette();
+                    } else {
+                        console.error('Could not find unit at selected pos:', selectedGridUnit);
+                        selectedGridUnit = null; // Reset if invalid
+                        renderGrid();
+                    }
+                    return;
+                }
+
+                // Switch selection to another unit
+                selectedGridUnit = { x, y };
+                // Also clear palette selection to avoid confusion
+                if (selectedType) {
+                    selectedType = null;
+                    updatePalette();
+                }
+                renderGrid();
+                return;
+            }
+
+            // Priority 2: Select Unit on Grid (Overrides Palette Place if clicking existing)
+            if (existingUnit) {
+                selectedGridUnit = { x, y };
+                // IMPORTANT: If we select a unit on grid, we disable palette selection
+                // This ensures we are in "Move Mode" and not "Place/Replace Mode"
+                if (selectedType) {
+                    selectedType = null;
+                    updatePalette();
+                }
+                renderGrid();
+                return;
+            }
+
+            // Priority 3: Place from Palette (Only if empty cell)
+            if (selectedType) {
+                // Since 'existingUnit' is handled above, we know cell is empty here.
+
+                // Double check count limit
+                const count = placedUnits.filter(u => u.type === selectedType).length;
+                if (count >= UNIT_LIMITS[selectedType]) {
+                    alert('該單位數量已達上限');
+                    return;
+                }
+
+                placedUnits.push({ x, y, type: selectedType });
+                renderGrid();
+                updatePalette();
+                return;
+            }
+        }
+
+        function removeUnit(x, y) {
+            const idx = placedUnits.findIndex(u => u.x === x && u.y === y);
+            if (idx !== -1) {
+                // If removing the currently selected unit, clear selection
+                if (selectedGridUnit && selectedGridUnit.x === x && selectedGridUnit.y === y) {
+                    selectedGridUnit = null;
+                }
+                placedUnits.splice(idx, 1);
+                renderGrid();
+                updatePalette();
+            }
+        }
+
+        function renderGrid() {
+            // Clear all visually
+            document.querySelectorAll('.grid-cell').forEach(c => {
+                c.innerHTML = '';
+                c.classList.remove('selected-unit');
+            });
+
+            // Render placed
+            placedUnits.forEach(u => {
+                const cell = document.querySelector(`.grid-cell[data-x="${u.x}"][data-y="${u.y}"]`);
+                if (cell) {
+                    const img = document.createElement('img');
+                    img.src = UNIT_DATA[u.type].img;
+                    cell.appendChild(img);
+
+                    // Highlight if selected for moving
+                    if (selectedGridUnit && u.x === selectedGridUnit.x && u.y === selectedGridUnit.y) {
+                        cell.classList.add('selected-unit');
+                    }
+                }
+            });
+        }
+
+        function clearGrid() {
+            if (confirm('確定要清空當前編輯的陣型嗎？')) {
+                placedUnits = [];
+                renderGrid();
+                updatePalette();
+            }
+        }
+
+        // ==================== Storage ====================
+        const STORAGE_KEY = 'antigravity_formations';
+
+        function getSavedFormations() {
+            const raw = localStorage.getItem(STORAGE_KEY);
+            return raw ? JSON.parse(raw) : {};
+        }
+
+        function saveFormation() {
+            const name = document.getElementById('formationName').value.trim();
+            if (!name) {
+                alert('請輸入陣型名稱');
+                return;
+            }
+
+            // Validaton: Must have a King
+            const hasKing = placedUnits.some(u => u.type === 'king');
+            if (!hasKing) {
+                alert('無法儲存：陣型中必須包含一位「國王」！');
+                return;
+            }
+
+            // Validation: Must place ALL units? Or just partial?
+            // Rule: "能使用的角色數量則是跟原本規則的數量一致" implies full usage usually, 
+            // but for flexibility let's just warn or allow save.
+            // Let's enforce full deck for valid game start, but allow partial save? 
+            // User request: "能使用的角色數量則是跟原本規則的數量一致" -> Likely means MAX limit, 
+            // but usually in these games you must field a full army.
+            // Let's check totals.
+            const totalRequired = Object.values(UNIT_LIMITS).reduce((a, b) => a + b, 0);
+            if (placedUnits.length < totalRequired) {
+                if (!confirm(`目前僅配置了 ${placedUnits.length}/${totalRequired} 個單位。\n未滿編的陣型可能無法在遊戲中使用（或處於劣勢）。\n確定要儲存嗎？`)) {
+                    return;
+                }
+            }
+
+            const formations = getSavedFormations();
+
+            // Check for overwrite
+            if (formations[name]) {
+                if (!confirm(`陣型名稱 "${name}" 已存在。確定要覆蓋嗎？`)) {
+                    return;
+                }
+            }
+
+            formations[name] = placedUnits;
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(formations));
+
+            alert('儲存成功！');
+            loadSavedList();
+        }
+
+        function loadSavedList() {
+            const list = document.getElementById('savedList');
+            list.innerHTML = '';
+            const formations = getSavedFormations();
+
+            if (Object.keys(formations).length === 0) {
+                list.innerHTML = '<div style="padding:10px; color:#666; text-align:center;">無存檔</div>';
+                return;
+            }
+
+            Object.keys(formations).forEach(name => {
+                const item = document.createElement('div');
+                item.className = 'saved-item';
+                item.innerHTML = `
+                    <span onclick="loadFormation('${name}')">${name}</span>
+                    <span class="delete-icon" onclick="deleteFormation('${name}')">×</span>
+                `;
+                list.appendChild(item);
+            });
+        }
+
+        window.loadFormation = function (name) {
+            const formations = getSavedFormations();
+            if (formations[name]) {
+                if (confirm(`確定要載入導致覆蓋當前編輯嗎：${name}？`)) {
+                    placedUnits = JSON.parse(JSON.stringify(formations[name]));
+                    document.getElementById('formationName').value = name;
+                    renderGrid();
+                    updatePalette();
+                }
+            }
+        };
+
+        window.deleteFormation = function (name) {
+            if (confirm(`確定要刪除：${name}？`)) {
+                const formations = getSavedFormations();
+                delete formations[name];
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(formations));
+                loadSavedList();
+            }
+        };
+
+    </script>
+</body>
+
+</html>

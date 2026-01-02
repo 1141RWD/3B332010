@@ -1,0 +1,1403 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Antigravity Tactics v1.4</title>
+    <link rel="stylesheet" href="styles.css?v=1.4">
+    <link rel="stylesheet" href="setup_modal.css?v=1.4">
+</head>
+
+<body>
+    <!-- Game Setup Modal -->
+    <div id="setupModal" class="modal-overlay">
+        <div class="setup-modal">
+            <h2>遊戲開始 - 布陣選擇 v1.4</h2>
+
+            <!-- Step 1: Red -->
+            <div id="setupStepRed" class="setup-step active">
+                <div class="player-title-red">紅方選擇布陣</div>
+                <div class="formation-list" id="redList">
+                    <!-- Populated by JS -->
+                </div>
+                <button id="btnConfirmRed" class="btn-confirm" disabled onclick="confirmRed()">下一步</button>
+            </div>
+
+            <!-- Step 2: Blue -->
+            <div id="setupStepBlue" class="setup-step">
+                <div class="player-title-blue">藍方選擇布陣</div>
+                <div class="formation-list" id="blueList">
+                    <!-- Populated by JS -->
+                </div>
+                <button id="btnConfirmBlue" class="btn-confirm" disabled onclick="confirmBlue()">開始遊戲</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="container">
+        <!-- 左側面板：回合指示 -->
+        <div class="side-panel left-panel">
+            <div id="turnIndicator" class="turn-indicator turn-red">紅方回合</div>
+            <div id="victoryMessage" class="victory-message" style="display: none;"></div>
+        </div>
+
+        <!-- 中間面板：棋盤 -->
+        <div class="board-container">
+            <div id="gameBoard" class="game-board"></div>
+            <!-- Aura Overlay for General's Protection -->
+            <svg id="auraOverlay" width="100%" height="100%"
+                style="position: absolute; top: 0; left: 0; pointer-events: none; z-index: 5;">
+                <defs>
+                    <filter id="trembleFilter" x="-20%" y="-20%" width="140%" height="140%">
+                        <!-- Increased scale and adapted frequency for visible "electric" arcs -->
+                        <feTurbulence id="turbulenceNoise" type="turbulence" baseFrequency="0.03" numOctaves="1"
+                            result="noise" seed="0">
+                            <!-- Removed SMIL animate, now handled by JS -->
+                        </feTurbulence>
+                        <feDisplacementMap in="SourceGraphic" in2="noise" scale="15" xChannelSelector="R"
+                            yChannelSelector="G" />
+                    </filter>
+                </defs>
+            </svg>
+            <svg id="attackRangeOverlay" width="100%" height="100%" style="z-index: 10;"></svg>
+            <!-- 中央提示訊息 -->
+            <div id="centralMessage" class="central-message"></div>
+        </div>
+
+        <!-- 右側面板：紀錄與控制 -->
+        <div class="side-panel right-panel">
+            <div class="log-panel">
+                <h3>戰鬥紀錄</h3>
+                <div id="logContent" class="log-content"></div>
+            </div>
+
+            <div class="controls-area">
+                <div id="apCounter" class="ap-counter-bottom">AP: 6</div>
+                <div class="controls">
+                    <button class="btn-end-turn" onclick="endTurn()">結束回合</button>
+                    <button class="btn-reset" onclick="resetGame()">重新開始</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="game-logic.js"></script>
+    <script src="ai.js"></script>
+    <script>
+        let gameEngine = null;
+        let aiController = null;
+        let currentSetupData = null; // Store for restart
+        let isPVE = false;
+
+        // PVE Initialization Check
+        function checkAndInitPVE() {
+            const params = new URLSearchParams(window.location.search);
+            if (params.get('mode') === 'pve') {
+                isPVE = true;
+                const configRaw = sessionStorage.getItem('antigravity_pve_config');
+                if (!configRaw) {
+                    alert('找不到 PVE 設定，將返回主選單');
+                    window.location.href = 'index.html';
+                    return;
+                }
+                const config = JSON.parse(configRaw);
+                initPVEGame(config);
+            } else {
+                // Determine normal flow (init modal)
+                try {
+                    initSetupModal();
+                } catch (e) {
+                    console.error('Error in initSetupModal:', e);
+                    alert('初始化選單失敗：' + e.message);
+                }
+            }
+        }
+
+        function initPVEGame(config) {
+            const formations = JSON.parse(localStorage.getItem('antigravity_formations') || '{}');
+            const customSetup = { red: null, blue: null };
+
+            // Blue: Player selected setup
+            if (config.playerFormation && config.playerFormation !== 'default') {
+                const raw = formations[config.playerFormation];
+                // WYSIWYG for Blue (v1.4)
+                customSetup.blue = raw.map(u => ({
+                    type: u.type,
+                    x: u.x,
+                    y: 11 + u.y
+                }));
+            }
+            // Red: Default
+
+            currentSetupData = customSetup;
+            gameState = gameEngine.initGameState(customSetup);
+
+            // Override Turn Order
+            if (config.firstTurn === 'blue') {
+                gameState.current_turn = 'blue';
+            } else {
+                gameState.current_turn = 'red';
+            }
+
+            // Init AI
+            aiController = new AIController(gameEngine, 'red', config.difficulty);
+
+            // Hide Setup UI
+            const modal = document.getElementById('setupModal');
+            if (modal) modal.style.display = 'none';
+            document.getElementById('victoryMessage').style.display = 'none';
+            document.getElementById('centralMessage').style.display = 'none';
+
+            renderBoard();
+            updateUI();
+
+            const diffText = config.difficulty === 'easy' ? '簡單' : '困難';
+            addLog(`單人模式開始！難度：${diffText}`);
+
+            if (gameState.current_turn === 'red') {
+                addLog('電腦 (紅方) 回合開始');
+                processAITurn();
+            } else {
+                addLog('玩家 (藍方) 回合開始');
+                showCentralMessage('你的回合', 'turn');
+            }
+        }
+
+        async function processAITurn() {
+            if (!isPVE || gameState.current_turn !== 'red' || gameState.game_over) return;
+
+            document.body.style.cursor = 'wait';
+
+            // AI Loop (Action by Action)
+            let turnActive = true;
+            while (turnActive && gameState.current_turn === 'red' && !gameState.game_over) {
+                const result = await aiController.decideAndExecute();
+
+                if (result.success) {
+                    // Animation if Attack
+                    if (result.ai_context && result.ai_context.action_type === 'attack') {
+                        const attacker = {
+                            id: result.ai_context.unit_id,
+                            type: result.ai_context.unit_type,
+                            team: 'red'
+                        };
+                        // Use old DOM state for animation start/end points
+                        await animateAttack(attacker, result.ai_context.target.x, result.ai_context.target.y);
+                    }
+
+                    gameState = gameEngine.state;
+                    renderBoard();
+                    updateUI();
+
+                    // Log AI Action
+                    if (result.ai_context) {
+                        const uName = UNIT_NAMES[result.ai_context.unit_type] || result.ai_context.unit_type;
+                        let actType = '未知行動';
+                        if (result.ai_context.action_type === 'move') actType = '移動到';
+                        else if (result.ai_context.action_type === 'attack') actType = '攻擊';
+                        else if (result.ai_context.action_type === 'skill') actType = '發動技能';
+
+                        const tgt = `(${result.ai_context.target.x}, ${result.ai_context.target.y})`;
+                        // Use a specific style for enemy actions so they stand out
+                        addLog(`電腦 ${uName} ${actType} ${tgt}`, 'enemy-action');
+                    } else if (result.ai_give_up) {
+                        addLog('電腦無計可施，停止行動');
+                        turnActive = false;
+                    } else if (result.message === '回合結束') {
+                        addLog('電腦結束回合');
+                    }
+
+                    if (result.message === '回合結束' || result.auto_turn_end) {
+                        turnActive = false;
+                    }
+                } else {
+                    console.error("AI Error:", result.error);
+                    turnActive = false;
+                    await endTurn(true);
+                }
+
+                if (result.auto_turn_end && gameState.current_turn === 'red') {
+                    turnActive = false;
+                    await endTurn(true);
+                }
+            }
+            document.body.style.cursor = 'default';
+
+            // If AI loop finished but it's still Red's turn (e.g. AI gave up), 
+            // re-enable "End Turn" button so user can force it.
+            if (isPVE && gameState.current_turn === 'red') {
+                const endTurnBtn = document.querySelector('.btn-end-turn');
+                if (endTurnBtn) endTurnBtn.style.display = 'inline-block';
+            }
+        }
+
+        // ... existing initGame ...
+
+        // 初始化遊戲 (Updated)
+        function initGame(setupData = null) {
+            // If setupData is provided (new game), save it. 
+            // If null (called from elsewhere without args), try to use saved.
+            // But be careful: resetGame calls initGame(). 
+            // Better: resetGame calls initGame(currentSetupData).
+
+            if (setupData) {
+                currentSetupData = setupData;
+            } else if (currentSetupData) {
+                // If initGame() called without args but we have history (shouldn't happen often if we fix resetGame)
+                setupData = currentSetupData;
+            }
+
+            gameState = gameEngine.initGameState(setupData);
+            // ... rest of init ...
+
+            // 隱藏所有提示訊息
+            document.getElementById('victoryMessage').style.display = 'none';
+            document.getElementById('centralMessage').style.display = 'none';
+
+            renderBoard();
+            updateUI();
+            addLog('遊戲開始！紅方先手');
+        }
+
+        // ...
+
+        function resetGame() {
+            if (confirm('確定要重新開始嗎？\n(將會重新載入頁面並重新選擇陣型)')) {
+                location.reload();
+            }
+        }
+        let actionMode = null; // null, 'select_action', 'move', 'attack'
+        let actionMenu = null;
+        let mouseMoveHandler = null;
+        let boardRect = null;
+
+        let selectedFormationRed = null;
+        let selectedFormationBlue = null;
+
+        // Init Sequence
+        window.onload = function () {
+            console.log('Window loaded. Initializing...');
+
+            // 1. Check if GameEngine class is loaded
+            if (typeof GameEngine === 'undefined') {
+                console.error('GameEngine class is undefined!');
+                alert('嚴重錯誤：無法載入遊戲引擎 (game-logic.js)。\n請檢查檔案是否存在或語法錯誤。\n(請按 F12 查看 Console)');
+                return;
+            }
+
+            // 2. Initialize GameEngine safely
+            try {
+                gameEngine = new GameEngine();
+                console.log('GameEngine initialized successfully.');
+
+                // 3. Init PVE or Normal
+                checkAndInitPVE();
+
+            } catch (e) {
+                console.error('Error instantiating GameEngine:', e);
+                alert('嚴重錯誤：遊戲引擎初始化失敗。\n' + e.message);
+                return;
+            }
+        };
+
+        function initSetupModal() {
+            let formations = {};
+            try {
+                const raw = localStorage.getItem('antigravity_formations');
+                if (raw) {
+                    formations = JSON.parse(raw);
+                }
+            } catch (e) {
+                console.error('Failed to parse formations:', e);
+                // Reset or ignore corrupt data
+                formations = {};
+            }
+
+            // Populate Red List
+            const redList = document.getElementById('redList');
+            if (redList) {
+                console.log('Populating Red List...');
+                populateFormationList(redList, formations, 'red');
+            } else {
+                console.error('Element #redList not found');
+            }
+
+            // Populate Blue List
+            const blueList = document.getElementById('blueList');
+            if (blueList) {
+                console.log('Populating Blue List...');
+                populateFormationList(blueList, formations, 'blue');
+            } else {
+                console.error('Element #blueList not found');
+            }
+        }
+
+        function populateFormationList(container, formations, team) {
+            container.innerHTML = '';
+            console.log(`Populating list for ${team}, formations found:`, Object.keys(formations).length);
+
+            // Default Option
+            const defDiv = document.createElement('div');
+            defDiv.className = 'formation-option';
+            defDiv.innerHTML = `<span>預設陣型 (官方設定)</span>`;
+            defDiv.onclick = () => selectFormation(team, 'default', defDiv);
+            container.appendChild(defDiv);
+
+            // Custom Options
+            Object.keys(formations).forEach(name => {
+                const div = document.createElement('div');
+                div.className = 'formation-option';
+                div.innerHTML = `<span>${name}</span>`;
+                div.onclick = () => selectFormation(team, name, div);
+                container.appendChild(div);
+            });
+        }
+
+        function selectFormation(team, name, el) {
+            // Updated UI
+            const container = team === 'red' ? document.getElementById('redList') : document.getElementById('blueList');
+            container.querySelectorAll('.formation-option').forEach(e => e.classList.remove('selected'));
+            el.classList.add('selected');
+
+            // Enable Button
+            const btn = team === 'red' ? document.getElementById('btnConfirmRed') : document.getElementById('btnConfirmBlue');
+            btn.disabled = false;
+
+            // Save Choice
+            if (team === 'red') selectedFormationRed = name;
+            else selectedFormationBlue = name;
+        }
+
+        function confirmRed() {
+            document.getElementById('setupStepRed').classList.remove('active');
+            document.getElementById('setupStepBlue').classList.add('active');
+        }
+
+        function confirmBlue() {
+            document.getElementById('setupModal').style.display = 'none';
+            initGameWithSetup();
+        }
+
+        function initGameWithSetup() {
+            const formations = JSON.parse(localStorage.getItem('antigravity_formations') || '{}');
+
+            const customSetup = { red: null, blue: null };
+
+            // Load Red
+            if (selectedFormationRed && selectedFormationRed !== 'default') {
+                // UPDATE: User requested Mirroring for Red Custom Formation.
+                // Mirror Left<->Right (X) and Top<->Bottom (Y within zone).
+                // Red Zone Height = 4 (Y=0 to 3). Max X = 12.
+                const raw = formations[selectedFormationRed];
+                customSetup.red = raw.map(u => ({
+                    type: u.type,
+                    x: 12 - u.x,
+                    y: 3 - u.y
+                }));
+            }
+
+            // Load Blue
+            if (selectedFormationBlue && selectedFormationBlue !== 'default') {
+                // UPDATE: User feedback "Direction is wrong".
+                // Previous Logic: Mirror Y (14-y) and Mirror X (12-x).
+                // Issue: If user builds formation expecting "Top-Left of Editor" -> "Top-Left of Deployment Zone",
+                // then Mirror logic reverses it.
+                //
+                // New Logic: Direct Translation.
+                // Blue Zone starts at Y=11.
+                // Editor Y=0 -> Game Y=11. (Front line? No, Y=11 is top of zone / front line for Blue).
+                // Editor X=0 -> Game X=0. (Left is Left).
+
+                const raw = formations[selectedFormationBlue];
+                customSetup.blue = raw.map(u => ({
+                    type: u.type,
+                    x: u.x,         // Keep X same (Left is Left)
+                    y: 11 + u.y     // Shift Y to start at 11
+                }));
+            }
+
+            initGame(customSetup);
+        }
+
+        // 初始化遊戲 (Updated)
+        function initGame(setupData = null) {
+            gameState = gameEngine.initGameState(setupData);
+            // 隱藏所有提示訊息
+            document.getElementById('victoryMessage').style.display = 'none';
+            document.getElementById('centralMessage').style.display = 'none';
+            // Start BGM if available
+            // const bgm = document.getElementById('bgm');
+            // if(bgm) bgm.play();
+
+            renderBoard();
+            updateUI();
+            addLog('遊戲開始！紅方先手');
+        }
+
+        // 渲染棋盤
+        function renderBoard() {
+            const board = document.getElementById('gameBoard');
+            board.innerHTML = '';
+
+            for (let y = 0; y < 15; y++) {
+                for (let x = 0; x < 13; x++) {
+                    const cell = document.createElement('div');
+                    cell.className = 'cell';
+                    cell.dataset.x = x;
+                    cell.dataset.y = y;
+
+                    const unit = gameState.board[`${x}_${y}`];
+
+                    if (unit) {
+                        if (unit.type === 'obstacle') {
+                            cell.classList.add('obstacle');
+                            const obstacleImg = document.createElement('img');
+                            obstacleImg.className = 'unit-img';
+                            obstacleImg.src = 'assets/obstacle.png';
+                            obstacleImg.alt = '障礙物';
+                            cell.appendChild(obstacleImg);
+                        } else {
+                            cell.classList.add(unit.team + '-unit');
+
+                            // 使用圖片取代文字字元
+                            const unitImg = document.createElement('img');
+                            unitImg.className = 'unit-img';
+                            unitImg.src = `assets/${unit.type}.png`;
+                            unitImg.alt = UNIT_NAMES[unit.type];
+                            // 圖片載入失敗時回退到文字
+                            unitImg.onerror = function () {
+                                this.style.display = 'none';
+                                const fallbackText = document.createElement('div');
+                                fallbackText.className = 'unit-type';
+                                fallbackText.textContent = UNIT_NAMES[unit.type];
+                                cell.insertBefore(fallbackText, cell.firstChild);
+                            };
+
+                            const unitHP = document.createElement('div');
+                            unitHP.className = 'unit-hp';
+                            unitHP.textContent = `${unit.hp}/${unit.max_hp}`;
+
+                            const hpBar = document.createElement('div');
+                            hpBar.className = 'hp-bar';
+                            const hpFill = document.createElement('div');
+                            hpFill.className = 'hp-fill';
+                            hpFill.style.width = `${(unit.hp / unit.max_hp) * 100}%`;
+                            hpBar.appendChild(hpFill);
+
+                            cell.appendChild(unitImg);
+                            cell.appendChild(unitHP);
+                            cell.appendChild(hpBar);
+
+                            // 顯示炮的冷卻狀態
+                            if (unit.type === 'can' && unit.cooldown > 0) {
+                                const cooldownIndicator = document.createElement('div');
+                                cooldownIndicator.className = 'cooldown-indicator';
+                                cooldownIndicator.textContent = `冷卻:${unit.cooldown}`;
+                                cell.appendChild(cooldownIndicator);
+                            }
+                        }
+                    }
+
+                    cell.onclick = () => handleCellClick(x, y);
+                    board.appendChild(cell);
+                }
+            }
+
+            // 繪製將軍的光環特效
+            setTimeout(drawAuraEffects, 0); // Ensure DOM is rendered
+        }
+
+        // Loop removed - Switching to CSS animation
+
+        // 繪製將軍的光環特效
+        function drawAuraEffects() {
+            const svg = document.getElementById('auraOverlay');
+            if (!svg) return;
+
+            // Remove existing aura borders
+            const existing = svg.querySelectorAll('.aura-border');
+            existing.forEach(el => el.remove());
+
+            const container = document.querySelector('.board-container');
+            const containerRect = container.getBoundingClientRect();
+
+            // Iterate board to find Generals
+            for (const [key, unit] of Object.entries(gameState.board)) {
+                if (unit.type === 'gen' && unit.aura_active) {
+                    const [gx, gy] = key.split('_').map(Number);
+
+                    // Determine covered cells (clamped to board)
+                    const minX = Math.max(0, gx - 2);
+                    const maxX = Math.min(12, gx + 2);
+                    const minY = Math.max(0, gy - 2);
+                    const maxY = Math.min(14, gy + 2);
+
+                    // Get bounding box of these cells
+                    const tlCell = document.querySelector(`.cell[data-x="${minX}"][data-y="${minY}"]`);
+                    const brCell = document.querySelector(`.cell[data-x="${maxX}"][data-y="${maxY}"]`);
+
+                    if (tlCell && brCell) {
+                        const tlRect = tlCell.getBoundingClientRect();
+                        const brRect = brCell.getBoundingClientRect();
+
+                        // Relative to container
+                        const x1 = tlRect.left - containerRect.left;
+                        const y1 = tlRect.top - containerRect.top;
+                        const x2 = brRect.right - containerRect.left;
+                        const y2 = brRect.bottom - containerRect.top;
+
+                        const width = x2 - x1;
+                        const height = y2 - y1;
+
+                        // Draw Rect (using path for potentially more complex shapes if needed, but rect is fine)
+                        // Using rect for simplicity
+                        const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+                        rect.setAttribute("x", x1);
+                        rect.setAttribute("y", y1);
+                        rect.setAttribute("width", width);
+                        rect.setAttribute("height", height);
+                        rect.setAttribute("rx", "15"); // rounded corners to look smoother
+                        rect.setAttribute("ry", "15");
+                        rect.setAttribute("class", `aura-border aura-border-${unit.team}`);
+
+                        svg.appendChild(rect);
+                    }
+                }
+            }
+        }
+
+        // 處理格子點擊
+        async function handleCellClick(x, y) {
+            if (gameState.game_over) {
+                alert('遊戲已結束！');
+                return;
+            }
+
+            // PVE AI Turn Blocking
+            if (isPVE && gameState.current_turn === 'red') {
+                return;
+            }
+
+            const unit = gameState.board[`${x}_${y}`];
+
+            // 移動模式：點擊綠色格子移動，其他取消
+            if (actionMode === 'move') {
+                const cell = document.querySelector(`.cell[data-x="${x}"][data-y="${y}"]`);
+                if (cell.classList.contains('move-highlight')) {
+                    await performMove(x, y);
+                } else {
+                    cancelAction();
+                    addLog('取消移動');
+                }
+                return;
+            }
+
+            // 攻擊模式：點擊目標攻擊，其他取消
+            if (actionMode === 'attack') {
+                const cell = document.querySelector(`.cell[data-x="${x}"][data-y="${y}"]`);
+                if (cell.classList.contains('attack-target')) {
+                    await performAttack(x, y);
+                } else {
+                    cancelAction();
+                    addLog('取消攻擊');
+                }
+                return;
+            }
+
+            // 點擊己方單位 -> 顯示操作選單
+            if (unit && unit.team === gameState.current_turn && unit.type !== 'obstacle') {
+                selectedUnit = unit;
+                selectedPos = { x, y };
+                showActionMenu(x, y);
+                addLog(`選擇了 ${unit.team === 'red' ? '紅方' : '藍方'} ${UNIT_NAMES[unit.type]} (${x},${y})`);
+                return;
+            }
+
+            // 點擊其他地方取消選擇
+            if (selectedUnit || actionMode) {
+                cancelAction();
+            }
+        }
+
+        // 顯示操作選單
+        function showActionMenu(x, y) {
+            // 只清除操作狀態，不清除選中的單位信息
+            if (actionMenu) {
+                actionMenu.remove();
+                actionMenu = null;
+            }
+            if (mouseMoveHandler) {
+                document.removeEventListener('mousemove', mouseMoveHandler);
+                mouseMoveHandler = null;
+            }
+            const svg = document.getElementById('attackRangeOverlay');
+            if (svg) svg.innerHTML = '';
+            document.querySelectorAll('.move-highlight, .attack-target, .splash-target').forEach(el => {
+                el.classList.remove('move-highlight', 'attack-target', 'splash-target');
+            });
+
+            actionMode = 'select_action';
+            const cell = document.querySelector(`.cell[data-x="${x}"][data-y="${y}"]`);
+            if (cell) cell.classList.add('selected');
+
+            // 創建選單
+            actionMenu = document.createElement('div');
+            actionMenu.className = 'action-menu';
+
+            // 顯示單位名稱
+            const title = document.createElement('div');
+            title.className = 'action-menu-title';
+            title.textContent = UNIT_NAMES[selectedUnit.type];
+            actionMenu.appendChild(title);
+
+            const btnContainer = document.createElement('div');
+            btnContainer.style.display = 'flex';
+            btnContainer.style.gap = '10px';
+            btnContainer.style.justifyContent = 'center';
+
+            const moveBtn = document.createElement('button');
+            moveBtn.className = 'action-btn action-btn-move';
+            moveBtn.textContent = '移動';
+            moveBtn.onclick = (e) => {
+                e.stopPropagation();
+                enterMoveMode();
+            };
+
+            const attackBtn = document.createElement('button');
+            attackBtn.className = 'action-btn action-btn-attack';
+            attackBtn.textContent = '攻擊';
+            attackBtn.onclick = (e) => {
+                e.stopPropagation();
+                // 檢查炮是否處於冷卻中
+                if (selectedUnit.type === 'can' && selectedUnit.cooldown > 0) {
+                    alert(`炮處於冷卻中 (剩餘 ${selectedUnit.cooldown} 回合)`);
+                    return;
+                }
+                enterAttackMode();
+            };
+
+            btnContainer.appendChild(moveBtn);
+            btnContainer.appendChild(attackBtn);
+
+            // 將軍特殊技能：減傷領域
+            if (selectedUnit.type === 'gen') {
+                const auraBtn = document.createElement('button');
+                auraBtn.className = 'action-btn';
+                auraBtn.textContent = '減傷領域';
+                auraBtn.style.backgroundColor = '#ffd700'; // Gold color
+                auraBtn.style.color = '#000';
+
+                if (selectedUnit.aura_active) {
+                    auraBtn.disabled = true;
+                    auraBtn.textContent = `已開啟(${selectedUnit.aura_turns})`;
+                    auraBtn.style.opacity = '0.6';
+                    auraBtn.style.cursor = 'not-allowed';
+                } else if (selectedUnit.aura_cooldown > 0) {
+                    auraBtn.disabled = true;
+                    auraBtn.textContent = `冷卻中(${selectedUnit.aura_cooldown})`;
+                    auraBtn.style.opacity = '0.6';
+                    auraBtn.style.cursor = 'not-allowed';
+                }
+
+                auraBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    const result = gameEngine.activateAura(selectedUnit.id);
+                    if (result.success) {
+                        gameState = gameEngine.state;
+                        addLog(`${selectedUnit.team === 'red' ? '紅方' : '藍方'}將軍 ${result.message}`);
+                        cancelAction();
+                        updateUI();
+                        // 檢查是否需要自動換回合
+                        if (result.auto_turn_end) {
+                            setTimeout(() => {
+                                endTurn(true);
+                            }, 500);
+                        }
+                    } else {
+                        alert(result.error);
+                    }
+                };
+                btnContainer.appendChild(auraBtn);
+            }
+            actionMenu.appendChild(btnContainer);
+
+            // 定位選單
+            const boardContainer = document.querySelector('.board-container');
+            const cellRect = cell.getBoundingClientRect();
+            const containerRect = boardContainer.getBoundingClientRect();
+
+            actionMenu.style.left = (cellRect.left - containerRect.left + cellRect.width / 2 - 80) + 'px';
+            actionMenu.style.top = (cellRect.top - containerRect.top - 50) + 'px';
+
+            boardContainer.appendChild(actionMenu);
+        }
+
+        // 進入移動模式
+        function enterMoveMode() {
+            if (actionMenu) {
+                actionMenu.remove();
+                actionMenu = null;
+            }
+
+            actionMode = 'move';
+
+            // 清除之前的高亮（不重新渲染整個棋盤）
+            document.querySelectorAll('.move-highlight, .attack-target, .splash-target, .selected').forEach(el => {
+                el.classList.remove('move-highlight', 'attack-target', 'splash-target', 'selected');
+            });
+
+            const { x, y } = selectedPos;
+            const cell = document.querySelector(`.cell[data-x="${x}"][data-y="${y}"]`);
+            if (cell) cell.classList.add('selected');
+
+            // 計算花費1AP可達的格子
+            const currentAP = gameState.current_turn === 'red' ? gameState.red_ap : gameState.blue_ap;
+            const apMove = UNIT_STATS[selectedUnit.type].ap_move;
+
+            if (currentAP < apMove) {
+                addLog('AP不足，無法移動');
+                cancelAction();
+                return;
+            }
+
+            let highlightCount = 0;
+
+            // 1. 高亮相鄰8格（基本移動）
+            for (let dx = -1; dx <= 1; dx++) {
+                for (let dy = -1; dy <= 1; dy++) {
+                    if (dx === 0 && dy === 0) continue;
+                    const nx = x + dx;
+                    const ny = y + dy;
+                    if (nx >= 0 && nx < 13 && ny >= 0 && ny < 15) {
+                        const targetUnit = gameState.board[`${nx}_${ny}`];
+                        // 空格可移動（1AP），友方可交換（需2AP但先顯示）
+                        if (!targetUnit || (targetUnit.team === selectedUnit.team && targetUnit.type !== 'obstacle')) {
+                            const targetCell = document.querySelector(`.cell[data-x="${nx}"][data-y="${ny}"]`);
+                            if (targetCell) {
+                                targetCell.classList.add('move-highlight');
+                                highlightCount++;
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 2. 高亮跳躍移動（跳到直線上連續友方單位的前方一格，最多跳過3個）
+            const jumpDirections = [
+                { dx: 0, dy: 1, name: '下' },
+                { dx: 0, dy: -1, name: '上' },
+                { dx: 1, dy: 0, name: '右' },
+                { dx: -1, dy: 0, name: '左' }
+            ];
+
+            for (let dir of jumpDirections) {
+                // 沿著這個方向尋找連續的友方單位（最多3個）
+                let consecutiveAllies = 0;
+                let checkX = x + dir.dx;
+                let checkY = y + dir.dy;
+
+                // 計算連續的友方單位數量（最多3個）
+                while (checkX >= 0 && checkX < 13 && checkY >= 0 && checkY < 15 && consecutiveAllies < 3) {
+                    const checkUnit = gameState.board[`${checkX}_${checkY}`];
+                    if (checkUnit && checkUnit.team === selectedUnit.team && checkUnit.type !== 'obstacle') {
+                        consecutiveAllies++;
+                        checkX += dir.dx;
+                        checkY += dir.dy;
+                    } else {
+                        break;
+                    }
+                }
+
+                // 如果有連續的友方單位，跳到他們的前方一格
+                if (consecutiveAllies > 0) {
+                    // checkX, checkY 現在已經是最後一個友方單位的下一格
+                    if (checkX >= 0 && checkX < 13 && checkY >= 0 && checkY < 15) {
+                        const targetUnit = gameState.board[`${checkX}_${checkY}`];
+                        // 目標位置必須為空
+                        if (!targetUnit) {
+                            const targetCell = document.querySelector(`.cell[data-x="${checkX}"][data-y="${checkY}"]`);
+                            if (targetCell && !targetCell.classList.contains('move-highlight')) {
+                                targetCell.classList.add('move-highlight');
+                                highlightCount++;
+                            }
+                        }
+                    }
+                }
+            }
+
+            addLog('移動模式：點擊綠色格子移動（含跳躍）');
+        }
+
+        // 進入攻擊模式
+        function enterAttackMode() {
+            if (actionMenu) {
+                actionMenu.remove();
+                actionMenu = null;
+            }
+
+            actionMode = 'attack';
+
+            // 清除之前的高亮（不重新渲染整個棋盤）
+            document.querySelectorAll('.move-highlight, .attack-target, .splash-target, .selected').forEach(el => {
+                el.classList.remove('move-highlight', 'attack-target', 'splash-target', 'selected');
+            });
+
+            const { x, y } = selectedPos;
+            const cell = document.querySelector(`.cell[data-x="${x}"][data-y="${y}"]`);
+            if (cell) cell.classList.add('selected');
+
+            // 更新棋盤rect
+            const board = document.getElementById('gameBoard');
+            boardRect = board.getBoundingClientRect();
+
+            // 添加鼠標移動監聽
+            mouseMoveHandler = (e) => handleMouseMoveInAttackMode(e);
+            document.addEventListener('mousemove', mouseMoveHandler);
+
+            addLog('攻擊模式：移動鼠標瞄準目標');
+        }
+
+        // 處理攻擊模式下的鼠標移動
+        function handleMouseMoveInAttackMode(e) {
+            if (actionMode !== 'attack' || !selectedPos) return;
+
+            // 每次都重新獲取boardRect，以處理滾動
+            const board = document.getElementById('gameBoard');
+            boardRect = board.getBoundingClientRect();
+
+            const { x, y } = selectedPos;
+            const range = UNIT_STATS[selectedUnit.type].rng;
+
+            // 檢測鼠標下的目標格子
+            const cells = document.elementsFromPoint(e.clientX, e.clientY);
+            const targetCell = cells.find(el => el.classList.contains('cell'));
+
+            // 清除之前的目標高亮
+            document.querySelectorAll('.attack-target, .splash-target').forEach(el => {
+                el.classList.remove('attack-target', 'splash-target');
+            });
+
+            // 高亮邏輯
+            if (targetCell) {
+                const tx = parseInt(targetCell.dataset.x);
+                const ty = parseInt(targetCell.dataset.y);
+                const dist = Math.max(Math.abs(tx - x), Math.abs(ty - y));
+                const targetUnit = gameState.board[`${tx}_${ty}`];
+
+                // 如果是射程內的敵方單位，高亮
+                if (targetUnit && targetUnit.team !== selectedUnit.team &&
+                    targetUnit.type !== 'obstacle' && dist <= range && dist > 0) {
+                    targetCell.classList.add('attack-target'); // 主要目標
+
+                    // 濺射傷害檢查 (Mage 或 Can)
+                    if (selectedUnit.type === 'mage' || selectedUnit.type === 'can') {
+                        // 3x3 濺射
+                        for (let dx = -1; dx <= 1; dx++) {
+                            for (let dy = -1; dy <= 1; dy++) {
+                                const sx = tx + dx;
+                                const sy = ty + dy;
+                                if (sx >= 0 && sx < 13 && sy >= 0 && sy < 15) {
+                                    const splashCell = document.querySelector(`.cell[data-x="${sx}"][data-y="${sy}"]`);
+                                    if (splashCell && (dx !== 0 || dy !== 0)) {
+                                        splashCell.classList.add('splash-target');
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 繪製動態攻擊線 (跟隨鼠標)
+            if (targetCell && targetCell.classList.contains('attack-target')) {
+                // 如果瞄準了有效目標，強制鎖定到目標中心，確保綠線與攻擊軌跡一致
+                const rect = targetCell.getBoundingClientRect();
+                const centerX = rect.left + rect.width / 2;
+                const centerY = rect.top + rect.height / 2;
+                drawDynamicAttackLine(centerX, centerY);
+            } else {
+                // 否則跟隨鼠標
+                drawDynamicAttackLine(e.clientX, e.clientY);
+            }
+        }
+
+        // 繪製動態攻擊範圍線
+        function drawDynamicAttackLine(mouseX, mouseY) {
+            const svg = document.getElementById('attackRangeOverlay');
+            if (!selectedPos) {
+                svg.innerHTML = '';
+                return;
+            }
+
+            const { x, y } = selectedPos;
+            const range = UNIT_STATS[selectedUnit.type].rng;
+
+            // 獲取容器和棋盤資訊
+            const container = document.querySelector('.board-container');
+            const containerRect = container.getBoundingClientRect();
+
+            // 獲取起點格子（選中單位）
+            const selectedCell = document.querySelector(`.cell[data-x="${x}"][data-y="${y}"]`);
+            if (!selectedCell) return;
+            const startRect = selectedCell.getBoundingClientRect();
+
+            // 計算起點中心（相對於容器）
+            const startX = startRect.left - containerRect.left + startRect.width / 2;
+            const startY = startRect.top - containerRect.top + startRect.height / 2;
+
+            // 計算鼠標位置（相對於容器）
+            let endX = mouseX - containerRect.left;
+            let endY = mouseY - containerRect.top;
+
+            // 計算相對於起點的向量
+            let dx = endX - startX;
+            let dy = endY - startY;
+
+            // 計算格子大小 (近似值)
+            const cellWidth = startRect.width;
+            const cellHeight = startRect.height; // Should be same as width
+
+            // 將像素距離轉換為"邏輯距離" (Chebyshev)
+            // 這裡我們用簡單的比例放大：如果滑鼠超過了 (range * cellWidth) 的方形邊界，就截斷
+            // 考慮到 Chebyshev 距離是方形擴散，我們分別限制 X 和 Y 軸
+
+            // 允許稍微超出格子中心到邊緣的距離，所以用 range + 0.5 (覆蓋整個目標格)
+            // 或者嚴格一點，只允許連線到 range 半徑的邊緣
+            const maxDistPixels = (range * cellWidth) + (cellWidth * 0.5); // 讓線頭能碰到最遠格子的中心甚至邊緣
+
+            // 計算目前的 Chebyshev 像素距離
+            // 我們希望限制在以 start 為中心的方形區域內
+            // 方形邊長半徑 = range * cellWidth (大約)
+
+            // 更加精確的算法：
+            // 如果我們把 dx, dy 正規化到 "格子單位"
+            const gridDx = dx / cellWidth;
+            const gridDy = dy / cellHeight;
+
+            // Chebyshev magnitude
+            const magnitude = Math.max(Math.abs(gridDx), Math.abs(gridDy));
+
+            if (magnitude > range) {
+                // 需要縮短
+                const scale = range / magnitude;
+                dx *= scale;
+                dy *= scale;
+                endX = startX + dx;
+                endY = startY + dy;
+            }
+
+            // 繪製SVG線
+            svg.innerHTML = `<line class="attack-range-line" x1="${startX}" y1="${startY}" x2="${endX}" y2="${endY}" />`;
+        }
+
+        // 取消操作
+        function cancelAction() {
+            actionMode = null;
+
+            if (actionMenu) {
+                actionMenu.remove();
+                actionMenu = null;
+            }
+
+            if (mouseMoveHandler) {
+                document.removeEventListener('mousemove', mouseMoveHandler);
+                mouseMoveHandler = null;
+            }
+
+            const svg = document.getElementById('attackRangeOverlay');
+            if (svg) svg.innerHTML = '';
+
+            selectedUnit = null;
+            selectedPos = null;
+            renderBoard();
+        }
+
+        // 執行移動
+        async function performMove(tx, ty) {
+            const { x, y } = selectedPos;
+            const targetUnit = gameState.board[`${tx}_${ty}`];
+
+            let moveType = 'move';
+            if (targetUnit && targetUnit.team === selectedUnit.team) {
+                moveType = 'swap';
+            } else if (Math.abs(tx - x) > 1 || Math.abs(ty - y) > 1) {
+                moveType = 'jump';
+            }
+
+            const result = gameEngine.executeMove(selectedUnit.id, tx, ty, moveType);
+
+            if (result.success) {
+                gameState = gameEngine.state;
+                addLog(`${selectedUnit.team === 'red' ? '紅方' : '藍方'} ${UNIT_NAMES[selectedUnit.type]} ${result.message} 到 (${tx},${ty}) [消耗 ${result.ap_used} AP]`);
+                cancelAction();
+                updateUI();
+
+                // 檢查是否需要自動換回合
+                if (result.auto_turn_end) {
+                    setTimeout(() => {
+                        endTurn(true); // 傳入 true 表示自動換回合
+                    }, 500);
+                }
+            } else {
+                alert(result.error);
+                cancelAction();
+            }
+        }
+
+        // 執行攻擊
+        async function performAttack(tx, ty) {
+            // 1. 先執行邏輯檢查 (檢查AP, 冷卻, 射程等)
+            // 先備份狀態，雖然executeAttack會直接修改state，但我們還沒renderBoard，所以畫面上還是舊的
+            const result = gameEngine.executeAttack(selectedUnit.id, tx, ty);
+
+            if (!result.success) {
+                alert(result.error);
+                cancelAction();
+                return;
+            }
+
+            // 2. 邏輯檢查通過，播放攻擊動畫的目標應該是實際命中點（可能被阻擋）
+            let actualTx = tx;
+            let actualTy = ty;
+
+            // 使用後端返回的實際命中座標（優先）
+            if (result.final_x !== undefined && result.final_y !== undefined) {
+                actualTx = result.final_x;
+                actualTy = result.final_y;
+            }
+            // 備用：從事件中尋找主要傷害事件
+            else if (result.events && result.events.length > 0) {
+                // 通常第一個傷害事件就是主要目標（因為濺射是在之後push的）
+                // 或者是被阻擋的目標
+                const mainHit = result.events[0];
+                if (mainHit && mainHit.type === 'damage') {
+                    actualTx = mainHit.x;
+                    actualTy = mainHit.y;
+                }
+            }
+
+            // 注意：此時 gameState 已經被更新了 (HP已扣除)，但 DOM (renderBoard) 還沒更新
+            // 這正是我們想要的：在舊畫面上播放動畫 -> 動畫結束 -> updateUI (顯示新HP/死亡)
+            await animateAttack(selectedUnit, actualTx, actualTy);
+            // 這裡傳入 actualTx, actualTy 給 triggerHitEffect (在 animateAttack 內部調用)
+            // 確保爆炸發生在正確位置
+
+            gameState = gameEngine.state;
+
+            // 處理戰鬥事件
+            result.events.forEach(event => {
+                if (event && event.type === 'damage') {
+                    const targetUnit = event.unit_id;
+                    const protectedTag = event.protected ? ' [將軍保護]' : '';
+                    const msg = `${selectedUnit.team === 'red' ? '紅方' : '藍方'} ${UNIT_NAMES[selectedUnit.type]} 攻擊 (${event.x},${event.y}) 造成 ${event.damage} 點傷害${protectedTag}`;
+                    addLog(msg, event.died ? 'death' : 'damage');
+
+                    if (event.died) {
+                        addLog(`單位陣亡！`, 'death');
+                    }
+                }
+            });
+
+            addLog(`消耗 ${result.ap_used} AP`);
+
+            cancelAction();
+            updateUI();
+            renderBoard(); // 確保血量更新
+
+            if (gameState.game_over) {
+                showVictory();
+            } else if (result.auto_turn_end) {
+                // 自動換回合
+                setTimeout(() => {
+                    endTurn(true); // 傳入 true 表示自動換回合
+                }, 500);
+            }
+        }
+
+        // 處理攻擊動畫
+        function animateAttack(attacker, tx, ty) {
+            return new Promise(resolve => {
+                const { x: sx, y: sy } = gameEngine.findUnitPosition(attacker.id) ? { x: gameEngine.findUnitPosition(attacker.id)[0], y: gameEngine.findUnitPosition(attacker.id)[1] } : selectedPos;
+
+                // 獲取起點和終點的螢幕座標
+                const startCell = document.querySelector(`.cell[data-x="${sx}"][data-y="${sy}"]`);
+                const targetCell = document.querySelector(`.cell[data-x="${tx}"][data-y="${ty}"]`);
+
+                if (!startCell || !targetCell) {
+                    resolve();
+                    return;
+                }
+
+                const sRect = startCell.getBoundingClientRect();
+                const tRect = targetCell.getBoundingClientRect();
+                const container = document.querySelector('.board-container');
+                const cRect = container.getBoundingClientRect();
+
+                // 計算相對座標
+                const startX = sRect.left - cRect.left + sRect.width / 2;
+                const startY = sRect.top - cRect.top + sRect.height / 2;
+                const endX = tRect.left - cRect.left + tRect.width / 2;
+                const endY = tRect.top - cRect.top + tRect.height / 2;
+
+                // 根據兵種決定特效
+                const type = attacker.type;
+
+                // 所有攻擊都使用投射物動畫（包括近戰劍氣）
+                const projectile = document.createElement('div');
+                projectile.className = 'projectile';
+                const img = document.createElement('img');
+
+                if (type === 'arc') {
+                    projectile.classList.add('arrow');
+                    img.src = 'assets/projectile_arrow.svg';
+                } else if (type === 'mage') {
+                    projectile.classList.add('fireball');
+                    img.src = 'assets/projectile_fireball.svg';
+                } else if (type === 'can') {
+                    projectile.classList.add('cannonball');
+                    img.src = 'assets/projectile_cannonball.svg';
+                } else {
+                    // 近戰 (Soldier, General, King) - 劍氣飛出
+                    projectile.classList.add('slash');
+                    img.src = 'assets/projectile_slash.svg';
+                }
+
+                projectile.appendChild(img);
+                container.appendChild(projectile);
+
+                // 設置初始位置
+                // 箭矢尺寸為 60x20，中心點在 30,10
+                // 但是 CSS 中 .projectile.arrow 其實被設定為 width: 30px (被樣式覆蓋)
+                // 為了讓箭矢看起來不像被壓縮，我們應該讓容器大小符合 SVG
+                if (type === 'arc') {
+                    projectile.style.width = '60px'; // 使用真實寬度
+                    projectile.style.height = '20px';
+                    // 修正偏移量，讓中心對齊 startX, startY
+                    projectile.style.left = (startX - 30) + 'px'; // 30 is half of 60
+                    projectile.style.top = (startY - 10) + 'px'; // 10 is half of 20
+                    projectile.style.transformOrigin = '30px 10px'; // 強制指定旋轉中心
+                    projectile.style.zIndex = '1000'; // 確保在最上層
+                } else {
+                    // 其他正方形投射物 (40x40 或類似)
+                    // .projectile 預設 40x40 -> offset 20
+                    // .fireball, .slash 等有各自的大小，這裡簡化處理，假設大約居中
+                    let size = 40;
+                    if (type === 'mage') size = 50; // .fireball
+                    if (type === 'can') size = 20; // .cannonball
+                    if (type === 'melee' || type === 'king' || type === 'gen' || type === 'sol') size = 60; // .slash
+
+                    const offset = size / 2;
+                    // 需要同時調整 element size (因為 CSS class 可能不夠精確)
+                    projectile.style.width = size + 'px';
+                    projectile.style.height = size + 'px';
+                    projectile.style.left = (startX - offset) + 'px';
+                    projectile.style.top = (startY - offset) + 'px';
+                }
+
+                // 計算角度
+                const angle = Math.atan2(endY - startY, endX - startX) * 180 / Math.PI;
+                projectile.style.transform = `rotate(${angle}deg)`;
+
+                // 強制重繪
+                projectile.offsetHeight;
+
+                // 設置過渡和終點
+                const distance = Math.sqrt(Math.pow(endX - startX, 2) + Math.pow(endY - startY, 2));
+                // 近戰劍氣速度稍微快一點? 或者統依
+                const duration = Math.min(0.5, distance / 500); // 根據距離調整速度
+
+                projectile.style.transition = `left ${duration}s linear, top ${duration}s linear`;
+
+                if (type === 'arc') {
+                    projectile.style.left = (endX - 30) + 'px';
+                    projectile.style.top = (endY - 10) + 'px';
+                } else {
+                    let size = 40;
+                    if (type === 'mage') size = 50;
+                    if (type === 'can') size = 20;
+                    if (type === 'melee' || type === 'king' || type === 'gen' || type === 'sol') size = 60;
+                    const offset = size / 2;
+                    projectile.style.left = (endX - offset) + 'px';
+                    projectile.style.top = (endY - offset) + 'px';
+                }
+
+                // 動畫結束後
+                setTimeout(() => {
+                    projectile.remove();
+                    // 觸發爆炸/命中特效
+                    triggerHitEffect(type, tx, ty);
+                    resolve();
+                }, duration * 1000);
+            });
+        }
+
+        // 觸發命中/爆炸特效
+        function triggerHitEffect(type, tx, ty) {
+            const container = document.querySelector('.board-container');
+            const targetCells = [];
+
+            // 確定受影響的格子
+            if (type === 'mage' || type === 'can') {
+                // 3x3 範圍
+                for (let dx = -1; dx <= 1; dx++) {
+                    for (let dy = -1; dy <= 1; dy++) {
+                        const nx = tx + dx;
+                        const ny = ty + dy;
+                        if (nx >= 0 && nx < 13 && ny >= 0 && ny < 15) {
+                            // 判斷是否有單位或只是顯示特效?
+                            // 只要在範圍內都顯示爆炸
+                            targetCells.push({ x: nx, y: ny });
+                        }
+                    }
+                }
+            } else {
+                // 單體
+                targetCells.push({ x: tx, y: ty });
+            }
+
+            targetCells.forEach(pos => {
+                const cell = document.querySelector(`.cell[data-x="${pos.x}"][data-y="${pos.y}"]`);
+                if (!cell) return;
+
+                const rect = cell.getBoundingClientRect();
+                const cRect = container.getBoundingClientRect();
+
+                const effect = document.createElement('div');
+
+                if (type === 'melee' || type === 'king' || type === 'gen' || type === 'sol' || type === 'arc') {
+                    // 劍氣和箭矢(arc)已作為投射物飛出，此處不再顯示額外的靜態特效
+                    // 移除重複的 effect-slash
+                    return;
+                } else {
+                    effect.className = 'effect-explosion';
+                }
+
+                effect.style.left = (rect.left - cRect.left) + 'px';
+                effect.style.top = (rect.top - cRect.top) + 'px';
+                effect.style.width = rect.width + 'px';
+                effect.style.height = rect.height + 'px';
+
+                container.appendChild(effect);
+
+                // 動畫結束後移除
+                setTimeout(() => {
+                    effect.remove();
+                }, 500);
+            });
+        }
+
+        // 結束回合
+        async function endTurn(isAuto = false) {
+            cancelAction(); // 清除任何進行中的操作
+
+            const result = gameEngine.endTurn();
+
+            if (result.success) {
+                gameState = gameEngine.state;
+                renderBoard();
+                updateUI();
+
+                // 顯示過期效果日誌
+                if (result.expired_effects) {
+                    result.expired_effects.forEach(effect => {
+                        const teamName = effect.team === 'red' ? '紅方' : '藍方';
+                        addLog(`${teamName}將軍的${effect.message}`);
+                    });
+                }
+
+                addLog(`===== 回合 ${gameState.turn_count} 開始 =====`);
+                addLog(`${gameState.current_turn === 'red' ? '紅方' : '藍方'} 回合開始`);
+
+                // 顯示中央提示訊息
+                const turnText = gameState.current_turn === 'red' ? '紅方回合' : '藍方回合';
+                showCentralMessage(turnText, 'turn');
+
+                // Trigger AI if PVE and now Red turn
+                if (isPVE && gameState.current_turn === 'red') {
+                    // Slight delay for UX
+                    setTimeout(() => processAITurn(), 500);
+                }
+            }
+        }
+
+        // 重新開始 - Function definition moved to global scope
+        /* 
+        function resetGame() {
+            if (confirm('確定要重新開始遊戲嗎？')) {
+                cancelAction(); 
+                initGame();
+                document.getElementById('logContent').innerHTML = '';
+            }
+        }
+        */
+
+        // 更新UI
+        function updateUI() {
+            const turnIndicator = document.getElementById('turnIndicator');
+            const apCounter = document.getElementById('apCounter');
+
+            if (gameState.current_turn === 'red') {
+                turnIndicator.textContent = '紅方回合';
+                turnIndicator.className = 'turn-indicator turn-red';
+                apCounter.textContent = `AP: ${gameState.red_ap}`;
+            } else {
+                turnIndicator.textContent = '藍方回合';
+                turnIndicator.className = 'turn-indicator turn-blue';
+                apCounter.textContent = `AP: ${gameState.blue_ap}`;
+            }
+
+            // End Turn Button Visibility in PVE
+            const endTurnBtn = document.querySelector('.btn-end-turn');
+            if (endTurnBtn) {
+                if (isPVE && gameState.current_turn === 'red') {
+                    endTurnBtn.style.display = 'none';
+                } else {
+                    endTurnBtn.style.display = 'inline-block';
+                }
+            }
+        }
+
+        // 顯示勝利訊息
+        function showVictory() {
+            const victoryMessage = document.getElementById('victoryMessage');
+            const winner = gameState.winner === 'red' ? '紅方' : '藍方';
+            victoryMessage.textContent = `🎉 ${winner} 獲勝！🎉`;
+            victoryMessage.style.display = 'block';
+            addLog(`========== ${winner} 獲勝！ ==========`, 'death');
+
+            // 顯示中央提示訊息
+            showCentralMessage(`${winner} 勝利！`, 'victory');
+        }
+
+        // 顯示中央提示訊息
+        function showCentralMessage(text, type) {
+            const messageDiv = document.getElementById('centralMessage');
+            messageDiv.textContent = text;
+            messageDiv.className = `central-message ${type}`;
+            messageDiv.style.display = 'flex';
+
+            // 2秒後自動隱藏（勝利訊息除外）
+            if (type !== 'victory') {
+                setTimeout(() => {
+                    messageDiv.style.display = 'none';
+                }, 2000);
+            }
+        }
+
+        // 添加日誌
+        function addLog(message, type = 'info') {
+            const logContent = document.getElementById('logContent');
+            const entry = document.createElement('div');
+            entry.className = `log-entry ${type}`;
+            entry.textContent = message;
+            logContent.appendChild(entry);
+            logContent.scrollTop = logContent.scrollHeight;
+        }
+
+        // 頁面載入時初始化 - 已在頂部 gameEngine 初始化後處理
+        // window.onload = initGame; // 移除此行，避免覆蓋頂部的初始化邏輯
+    </script>
+</body>
+
+</html>

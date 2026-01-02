@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Antigravity Tactics - 單人遊戲設定</title>
+    <link rel="stylesheet" href="styles.css?v=1.4">
+    <style>
+        body {
+            /* Reuse battlefield background but maybe darker/different overlay */
+            background-image:
+                linear-gradient(rgba(0, 0, 0, 0.7), rgba(0, 0, 0, 0.7)),
+                url('assets/bg_stars.jpg');
+            /* Reuse existing asset or just dark bg */
+            background-color: #0b0c10;
+            background-size: cover;
+            background-position: center;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            color: #fff;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        .setup-container {
+            background: rgba(11, 12, 16, 0.95);
+            border: 2px solid #66fcf1;
+            border-radius: 15px;
+            padding: 40px;
+            width: 400px;
+            box-shadow: 0 0 20px rgba(102, 252, 241, 0.3);
+            text-align: center;
+        }
+
+        h2 {
+            color: #66fcf1;
+            margin-bottom: 30px;
+            font-size: 28px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+
+        .form-group {
+            margin-bottom: 25px;
+            text-align: left;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 10px;
+            font-size: 16px;
+            color: #aaa;
+        }
+
+        select,
+        button {
+            width: 100%;
+            padding: 12px;
+            border-radius: 5px;
+            border: 1px solid #45a29e;
+            background: #1f2833;
+            color: #fff;
+            font-size: 16px;
+            outline: none;
+            transition: all 0.3s ease;
+        }
+
+        select:focus,
+        button:hover {
+            border-color: #66fcf1;
+            box-shadow: 0 0 10px rgba(102, 252, 241, 0.5);
+        }
+
+        button.start-btn {
+            background: linear-gradient(135deg, #45a29e, #66fcf1);
+            color: #0b0c10;
+            font-weight: bold;
+            border: none;
+            cursor: pointer;
+            margin-top: 10px;
+        }
+
+        button.start-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 252, 241, 0.4);
+        }
+
+        .back-link {
+            display: block;
+            margin-top: 20px;
+            color: #aaa;
+            text-decoration: none;
+            font-size: 14px;
+        }
+
+        .back-link:hover {
+            color: #fff;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="setup-container">
+        <h2>單人遊戲設定</h2>
+
+        <div class="form-group">
+            <label>選擇難度</label>
+            <select id="difficulty">
+                <option value="easy">簡單 (隨機行動)</option>
+                <option value="normal">普通 (優先攻擊)</option>
+                <option value="hard">困難 (智能進攻)</option>
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label>先後攻順序</label>
+            <select id="turnOrder">
+                <option value="player">玩家先攻 (先手)</option>
+                <option value="ai">電腦先攻 (後手)</option>
+                <option value="random">隨機決定</option>
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label>選擇您的布陣 (藍方)</label>
+            <select id="formation">
+                <option value="default">預設陣型</option>
+            </select>
+        </div>
+
+        <button class="start-btn" onclick="startGame()">開始戰鬥</button>
+        <a href="index.html" class="back-link">← 返回主選單</a>
+    </div>
+
+    <script>
+        // Load formations on start
+        window.onload = function () {
+            const formations = JSON.parse(localStorage.getItem('antigravity_formations') || '{}');
+            const select = document.getElementById('formation');
+
+            Object.keys(formations).forEach(name => {
+                const opt = document.createElement('option');
+                opt.value = name;
+                opt.textContent = name;
+                select.appendChild(opt);
+            });
+        };
+
+        function startGame() {
+            const difficulty = document.getElementById('difficulty').value;
+            const turnOrder = document.getElementById('turnOrder').value;
+            const formation = document.getElementById('formation').value;
+
+            // Determine actual turn
+            let firstTurn = 'red'; // Default AI/Red
+            if (turnOrder === 'player') {
+                firstTurn = 'blue';  // Player is always Blue
+            } else if (turnOrder === 'random') {
+                firstTurn = Math.random() < 0.5 ? 'blue' : 'red';
+            } else {
+                firstTurn = 'red'; // AI First
+            }
+
+            const pveConfig = {
+                mode: 'pve',
+                difficulty: difficulty,
+                playerTeam: 'blue', // Fixed
+                aiTeam: 'red',      // Fixed
+                firstTurn: firstTurn,
+                playerFormation: formation
+            };
+
+            // Save to Session Storage for game.html to pick up
+            sessionStorage.setItem('antigravity_pve_config', JSON.stringify(pveConfig));
+
+            // Go to game
+            window.location.href = 'game.html?mode=pve';
+        }
+    </script>
+</body>
+
+</html>
