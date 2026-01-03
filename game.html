@@ -477,7 +477,7 @@
                             cell.classList.add('obstacle');
                             const obstacleImg = document.createElement('img');
                             obstacleImg.className = 'unit-img';
-                            obstacleImg.src = 'assets/obstacle.png';
+                            obstacleImg.src = 'assets/obstacle.jpg';
                             obstacleImg.alt = '障礙物';
                             cell.appendChild(obstacleImg);
                         } else {
@@ -486,7 +486,7 @@
                             // 使用圖片取代文字字元
                             const unitImg = document.createElement('img');
                             unitImg.className = 'unit-img';
-                            unitImg.src = `assets/${unit.type}.png`;
+                            unitImg.src = `assets/${unit.type}.jpg`;
                             unitImg.alt = UNIT_NAMES[unit.type];
                             // 圖片載入失敗時回退到文字
                             unitImg.onerror = function () {

@@ -11,7 +11,7 @@
         body {
             overflow: hidden;
             /* Prevent body scroll, handle in containers */
-            background-image: url('assets/battlefield_bg.png');
+            background-image: url('assets/battlefield_bg.jpg');
             background-size: cover;
             background-position: center;
             background-attachment: fixed;
@@ -50,27 +50,27 @@
                 <div class="gallery-top">
                     <!-- Cards will be populated here statically or dynamically -->
                     <div class="gallery-card" onclick="selectUnit('arc', this)">
-                        <img src="assets/arc.png">
+                        <img src="assets/arc.jpg">
                         <span>弓箭手</span>
                     </div>
                     <div class="gallery-card" onclick="selectUnit('mage', this)">
-                        <img src="assets/mage.png">
+                        <img src="assets/mage.jpg">
                         <span>法師</span>
                     </div>
                     <div class="gallery-card" onclick="selectUnit('gen', this)">
-                        <img src="assets/gen.png">
+                        <img src="assets/gen.jpg">
                         <span>將軍</span>
                     </div>
                     <div class="gallery-card" onclick="selectUnit('sol', this)">
-                        <img src="assets/sol.png">
+                        <img src="assets/sol.jpg">
                         <span>士兵</span>
                     </div>
                     <div class="gallery-card" onclick="selectUnit('can', this)">
-                        <img src="assets/can.png">
+                        <img src="assets/can.jpg">
                         <span>炮</span>
                     </div>
                     <div class="gallery-card" onclick="selectUnit('king', this)">
-                        <img src="assets/king.png">
+                        <img src="assets/king.jpg">
                         <span>王</span>
                     </div>
                 </div>
@@ -88,32 +88,32 @@
         const unitData = {
             'arc': {
                 name: '弓箭手',
-                img: 'assets/arc.png',
+                img: 'assets/arc.jpg',
                 desc: `<strong>血量：</strong>5<br><strong>傷害：</strong>3<br><strong>射程：</strong>5格<br><br>弓箭手射擊時，若射擊路徑上的己方單位位於弓箭手周圍 3x3 範圍內（即相鄰一格），則視為透明（可穿透且不造成誤傷）。<br>每回合只能攻擊兩次。`
             },
             'mage': {
                 name: '法師',
-                img: 'assets/mage.png',
+                img: 'assets/mage.jpg',
                 desc: `<strong>血量：</strong>6<br><strong>傷害：</strong>4<br><strong>射程：</strong>4格<br><br>命中敵人後3*3的範圍內受到2滴血的濺射傷害(友軍為1滴)。<br>攻擊軌跡可越過己方單位。<br>每回合只能攻擊兩次。`
             },
             'gen': {
                 name: '將軍',
-                img: 'assets/gen.png',
+                img: 'assets/gen.jpg',
                 desc: `<strong>血量：</strong>15<br><strong>傷害：</strong>5<br><strong>射程：</strong>1格<br><br>開啟主動技後消耗2AP，將軍以自身為中心5*5範圍內的己方單位受傷害減半(小數點四捨五入)，傷害最低為一。<br>結束後進入兩回合冷卻。`
             },
             'sol': {
                 name: '士兵',
-                img: 'assets/sol.png',
+                img: 'assets/sol.jpg',
                 desc: `<strong>血量：</strong>8<br><strong>傷害：</strong>3<br><strong>射程：</strong>1格`
             },
             'can': {
                 name: '炮',
-                img: 'assets/can.png',
+                img: 'assets/can.jpg',
                 desc: `<strong>血量：</strong>4<br><strong>傷害：</strong>8<br><strong>射程：</strong>7格<br><br>命中後對3*3範圍造成3濺射傷害。<br>攻擊一次需花費4AP，移動一次需花費2AP。<br>攻擊完後有三回合冷卻。`
             },
             'king': {
                 name: '王',
-                img: 'assets/king.png',
+                img: 'assets/king.jpg',
                 desc: `<strong>血量：</strong>20<br><strong>傷害：</strong>10<br><strong>射程：</strong>1格`
             }
         };

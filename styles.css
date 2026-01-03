@@ -6,7 +6,7 @@
 
 body {
     font-family: 'Microsoft JhengHei', 'PingFang TC', sans-serif;
-    background: url('assets/battlefield_bg.png') no-repeat center center fixed;
+    background: url('assets/battlefield_bg.jpg') no-repeat center center fixed;
     background-size: cover;
     color: #fff;
     min-height: 100vh;
@@ -237,7 +237,7 @@ body {
     height: 100%;
     z-index: 2000;
     pointer-events: none;
-    background-image: url('assets/effect_explosion.png');
+    background-image: url('assets/effect_explosion.jpg');
     background-size: contain;
     background-repeat: no-repeat;
     background-position: center;
@@ -268,7 +268,7 @@ body {
     height: 100%;
     z-index: 2000;
     pointer-events: none;
-    background-image: url('assets/effect_slash.png');
+    background-image: url('assets/effect_slash.jpg');
     background-size: contain;
     background-repeat: no-repeat;
     background-position: center;
