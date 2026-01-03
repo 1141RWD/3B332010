@@ -369,27 +369,50 @@ class GameEngine {
             return { can_jump: false, error: '目標位置已被佔據' };
         }
 
-        // 檢查中間格是否有足夠的友方單位
+        // 檢查中間格的友方單位必須從起點開始連續
         const stepX = dx === 0 ? 0 : (dx > 0 ? 1 : -1);
         const stepY = dy === 0 ? 0 : (dy > 0 ? 1 : -1);
 
         let allyCount = 0;
         let currentX = sx + stepX;
         let currentY = sy + stepY;
+        let foundEmpty = false; // 標記是否遇到空格
 
         // 遍歷所有中間格
         while (currentX !== tx || currentY !== ty) {
             const cellUnit = this.getUnitAt(currentX, currentY);
+
             if (cellUnit && cellUnit.team === unit.team) {
+                // 如果已經遇到空格，之後不應該再有友方單位
+                if (foundEmpty) {
+                    return { can_jump: false, error: '友方單位必須連續排列' };
+                }
                 allyCount++;
+            } else {
+                // 遇到空格或敵方單位
+                foundEmpty = true;
             }
+
             currentX += stepX;
             currentY += stepY;
         }
 
-        // 至少需要 1 個友方單位，最多 3 個
-        if (allyCount < 1 || allyCount > 3) {
-            return { can_jump: false, error: `跳躍需要 1-3 個友方單位，當前有 ${allyCount} 個` };
+        // 必須至少有1個友方單位
+        if (allyCount < 1) {
+            return { can_jump: false, error: '跳躍需要至少1個友方單位' };
+        }
+
+        // 根據距離檢查友方單位數量
+        if (dist === 2) {
+            // 距離 2：必須正好有 1 個友方單位
+            if (allyCount !== 1) {
+                return { can_jump: false, error: `距離2的跳躍需要正好1個友方單位，當前有 ${allyCount} 個` };
+            }
+        } else if (dist === 3) {
+            // 距離 3：必須有 2 個連續的友方單位
+            if (allyCount !== 2) {
+                return { can_jump: false, error: `距離3的跳躍需要正好2個連續的友方單位，當前有 ${allyCount} 個` };
+            }
         }
 
         return { can_jump: true };
