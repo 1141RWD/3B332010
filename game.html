@@ -77,8 +77,20 @@
                 <div class="controls">
                     <button class="btn-end-turn" onclick="endTurn()">結束回合</button>
                     <button class="btn-reset" onclick="resetGame()">重新開始</button>
+                    <button class="btn-toggle-log" onclick="toggleLog()">📋 戰鬥記錄</button>
                 </div>
             </div>
+        </div>
+    </div>
+
+    <!-- 戰鬥記錄彈出視窗（手機版使用） -->
+    <div id="logModal" class="log-modal">
+        <div class="log-modal-content">
+            <div class="log-modal-header">
+                <h3>戰鬥記錄</h3>
+                <button class="log-modal-close" onclick="toggleLog()">✕</button>
+            </div>
+            <div id="logModalContent" class="log-modal-body"></div>
         </div>
     </div>
 
@@ -263,8 +275,19 @@
         // ...
 
         function resetGame() {
-            if (confirm('確定要重新開始嗎？\n(將會重新載入頁面並重新選擇陣型)')) {
-                location.reload();
+            if (isPVE) {
+                // 單人模式：返回單人模式設定頁面
+                if (confirm('確定要重新開始嗎？\n(將返回陣型選擇頁面)')) {
+                    // 清除 session storage
+                    sessionStorage.removeItem('antigravity_pve_config');
+                    // 導航回單人模式設定頁面
+                    window.location.href = 'single_player.html';
+                }
+            } else {
+                // 雙人模式：重新載入頁面並重新選擇陣型
+                if (confirm('確定要重新開始嗎？\n(將會重新載入頁面並重新選擇陣型)')) {
+                    location.reload();
+                }
             }
         }
         let actionMode = null; // null, 'select_action', 'move', 'attack'
@@ -783,7 +806,7 @@
                 }
             }
 
-            // 2. 高亮跳躍移動（跳到直線上連續友方單位的前方一格，最多跳過3個）
+            // 2. 高亮跳躍移動（跳躍距離 2-3 格，中間需要 1-3 個友方單位）
             const jumpDirections = [
                 { dx: 0, dy: 1, name: '下' },
                 { dx: 0, dy: -1, name: '上' },
@@ -792,35 +815,25 @@
             ];
 
             for (let dir of jumpDirections) {
-                // 沿著這個方向尋找連續的友方單位（最多3個）
-                let consecutiveAllies = 0;
-                let checkX = x + dir.dx;
-                let checkY = y + dir.dy;
+                // 檢查距離 2 和 3 的跳躍
+                for (let jumpDist = 2; jumpDist <= 3; jumpDist++) {
+                    const targetX = x + dir.dx * jumpDist;
+                    const targetY = y + dir.dy * jumpDist;
 
-                // 計算連續的友方單位數量（最多3個）
-                while (checkX >= 0 && checkX < 13 && checkY >= 0 && checkY < 15 && consecutiveAllies < 3) {
-                    const checkUnit = gameState.board[`${checkX}_${checkY}`];
-                    if (checkUnit && checkUnit.team === selectedUnit.team && checkUnit.type !== 'obstacle') {
-                        consecutiveAllies++;
-                        checkX += dir.dx;
-                        checkY += dir.dy;
-                    } else {
-                        break;
-                    }
-                }
+                    // 邊界檢查
+                    if (targetX < 0 || targetX >= 13 || targetY < 0 || targetY >= 15) continue;
 
-                // 如果有連續的友方單位，跳到他們的前方一格
-                if (consecutiveAllies > 0) {
-                    // checkX, checkY 現在已經是最後一個友方單位的下一格
-                    if (checkX >= 0 && checkX < 13 && checkY >= 0 && checkY < 15) {
-                        const targetUnit = gameState.board[`${checkX}_${checkY}`];
-                        // 目標位置必須為空
-                        if (!targetUnit) {
-                            const targetCell = document.querySelector(`.cell[data-x="${checkX}"][data-y="${checkY}"]`);
-                            if (targetCell && !targetCell.classList.contains('move-highlight')) {
-                                targetCell.classList.add('move-highlight');
-                                highlightCount++;
-                            }
+                    // 目標必須為空
+                    const targetUnit = gameState.board[`${targetX}_${targetY}`];
+                    if (targetUnit) continue;
+
+                    // 使用 gameEngine.canJump 檢查是否可以跳躍
+                    const result = gameEngine.canJump(selectedUnit, x, y, targetX, targetY);
+                    if (result.can_jump) {
+                        const targetCell = document.querySelector(`.cell[data-x="${targetX}"][data-y="${targetY}"]`);
+                        if (targetCell && !targetCell.classList.contains('move-highlight')) {
+                            targetCell.classList.add('move-highlight');
+                            highlightCount++;
                         }
                     }
                 }
@@ -1393,6 +1406,31 @@
             entry.textContent = message;
             logContent.appendChild(entry);
             logContent.scrollTop = logContent.scrollHeight;
+
+            // 如果彈出視窗是打開的，也同步更新
+            const modal = document.getElementById('logModal');
+            if (modal && modal.classList.contains('active')) {
+                const modalContent = document.getElementById('logModalContent');
+                modalContent.innerHTML = logContent.innerHTML;
+                modalContent.scrollTop = modalContent.scrollHeight;
+            }
+        }
+
+        // 切換戰鬥記錄顯示
+        function toggleLog() {
+            const modal = document.getElementById('logModal');
+            const logContent = document.getElementById('logContent');
+            const modalContent = document.getElementById('logModalContent');
+
+            if (modal.classList.contains('active')) {
+                // 關閉
+                modal.classList.remove('active');
+            } else {
+                // 打開並同步內容
+                modalContent.innerHTML = logContent.innerHTML;
+                modal.classList.add('active');
+                modalContent.scrollTop = modalContent.scrollHeight;
+            }
         }
 
         // 頁面載入時初始化 - 已在頂部 gameEngine 初始化後處理

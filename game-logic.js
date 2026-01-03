@@ -1,6 +1,6 @@
 /**
- * Antigravity Tactics - Game Logic
- * Ported from PHP to JavaScript
+ * 異界戰棋 - 遊戲邏輯
+ * 從 PHP 移植到 JavaScript
  */
 
 // ==================== 遊戲常數定義 ====================
@@ -43,14 +43,14 @@ class GameEngine {
             board: {}
         };
 
-        // Red Setup
+        // 紅方設置
         if (customSetup && customSetup.red) {
             this.setupCustomUnits({ red: customSetup.red });
         } else {
             this.setupDefaultRed();
         }
 
-        // Blue Setup
+        // 藍方設置
         if (customSetup && customSetup.blue) {
             this.setupCustomUnits({ blue: customSetup.blue });
         } else {
@@ -78,14 +78,14 @@ class GameEngine {
     }
 
     setupCustomUnits(setup) {
-        // Red Setup
+        // 紅方設置
         if (setup.red) {
             setup.red.forEach((unit, index) => {
                 const id = `r_${unit.type}${index}`;
                 this.state.board[`${unit.x}_${unit.y}`] = this.createUnit(id, unit.type, TEAM_RED);
             });
         }
-        // Blue Setup
+        // 藍方設置
         if (setup.blue) {
             setup.blue.forEach((unit, index) => {
                 const id = `b_${unit.type}${index}`;
@@ -195,7 +195,7 @@ class GameEngine {
     }
 
     distance(x1, y1, x2, y2) {
-        return Math.max(Math.abs(x2 - x1), Math.abs(y2 - y1)); // Chebyshev distance
+        return Math.max(Math.abs(x2 - x1), Math.abs(y2 - y1)); // 切比雪夫距離
     }
 
     isInBounds(x, y) {
@@ -369,16 +369,27 @@ class GameEngine {
             return { can_jump: false, error: '目標位置已被佔據' };
         }
 
-        // 檢查中間格是否有友方單位
+        // 檢查中間格是否有足夠的友方單位
         const stepX = dx === 0 ? 0 : (dx > 0 ? 1 : -1);
         const stepY = dy === 0 ? 0 : (dy > 0 ? 1 : -1);
 
-        const midX = sx + stepX;
-        const midY = sy + stepY;
-        const midUnit = this.getUnitAt(midX, midY);
+        let allyCount = 0;
+        let currentX = sx + stepX;
+        let currentY = sy + stepY;
 
-        if (!midUnit || !midUnit.team || midUnit.team !== unit.team) {
-            return { can_jump: false, error: '跳躍路徑中間必須有友方單位' };
+        // 遍歷所有中間格
+        while (currentX !== tx || currentY !== ty) {
+            const cellUnit = this.getUnitAt(currentX, currentY);
+            if (cellUnit && cellUnit.team === unit.team) {
+                allyCount++;
+            }
+            currentX += stepX;
+            currentY += stepY;
+        }
+
+        // 至少需要 1 個友方單位，最多 3 個
+        if (allyCount < 1 || allyCount > 3) {
+            return { can_jump: false, error: `跳躍需要 1-3 個友方單位，當前有 ${allyCount} 個` };
         }
 
         return { can_jump: true };

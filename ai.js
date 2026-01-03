@@ -1,43 +1,43 @@
 class AIController {
     constructor(gameEngine, team, difficulty) {
         this.engine = gameEngine;
-        this.team = team;            // 'red' or 'blue' (AI is currently designed for Red)
-        this.difficulty = difficulty; // 'easy' or 'hard'
+        this.team = team;            // '紅' 或 '藍' (AI 目前設計為紅方)
+        this.difficulty = difficulty; // 'easy' 或 'hard'
         this.opponent = team === 'red' ? 'blue' : 'red';
     }
 
     async decideAndExecute() {
-        console.log(`[AI] Thinking... (${this.difficulty})`);
+        console.log(`[AI] 思考中... (${this.difficulty})`);
 
-        // Artificial delay for realism (0.5s)
+        // 人工延遲以增加真實感 (0.5秒)
         await new Promise(r => setTimeout(r, 500));
 
         let move = null;
         if (this.difficulty === 'hard') {
             move = this.getHardMove();
         } else if (this.difficulty === 'normal') {
-            // Original 'hard' is now 'normal'
+            // 原始的 'hard' 現在是 'normal'
             move = this.getNormalMove();
         } else {
-            // 'easy'
+            // 'easy' 簡單模式
             move = this.getRandomMove();
         }
 
         if (move) {
-            console.log(`[AI] Executing move:`, move);
+            console.log(`[AI] 執行移動:`, move);
             return this.executeMove(move);
         } else {
-            console.log(`[AI] No valid moves found. Giving up control.`);
-            // User requested to remove active endTurn. Return a special flag.
+            console.log(`[AI] 沒有找到有效移動。放棄控制。`);
+            // 用戶要求移除主動結束回合。返回特殊旗標。
             return { success: true, ai_give_up: true };
         }
     }
 
-    // ================== STRATEGIES ==================
+    // ================== 策略方法 ==================
 
     getRandomMove() {
         const myUnits = this.getMyUnits();
-        // Shuffle units to check randomly
+        // 隨機打亂單位順序
         this.shuffle(myUnits);
 
         for (const unit of myUnits) {
@@ -55,17 +55,17 @@ class AIController {
         let bestMove = null;
         let bestScore = -9999;
 
-        // Scoring:
-        // Kill Hostile: +100
-        // Damage Hostile: +Damage
-        // Move towards center/enemy: +1 (Advancement)
+        // 評分標準：
+        // 擊殺敵人: +100
+        // 傷害敵人: +傷害值
+        // 向中央/敵人移動: +1 (推進)
 
         for (const unit of myUnits) {
             const actions = this.getValidActionsForUnit(unit);
             for (const action of actions) {
                 let score = this.evaluateActionBasic(unit, action);
 
-                // Add randomness to break ties
+                // 添加隨機性以打破平局
                 score += Math.random() * 2;
 
                 if (score > bestScore) {
@@ -75,7 +75,7 @@ class AIController {
             }
         }
 
-        return bestMove || this.getRandomMove(); // Fallback
+        return bestMove || this.getRandomMove(); // 後備方案
     }
 
     getHardMove() {
@@ -83,19 +83,19 @@ class AIController {
         let bestMove = null;
         let bestScore = -9999;
 
-        // Advanced Scoring:
-        // 1. Basic (Kill/Damage/Advance)
-        // 2. Skill Usage (General Aura)
-        // 3. Formation Clustering (Move near allies)
+        // 進階評分：
+        // 1. 基本評分 (擊殺/傷害/推進)
+        // 2. 技能使用 (將軍光環)
+        // 3. 陣型集結 (靠近盟友)
 
         for (const unit of myUnits) {
             const actions = this.getValidActionsForUnit(unit);
             for (const action of actions) {
                 let score = this.evaluateActionBasic(unit, action);
 
-                // Special Scoring for Hard Mode
+                // 困難模式的特殊評分
                 if (action.type === 'skill' && action.skillName === 'aura') {
-                    // Huge priority if enemies nearby to protect against
+                    // 如果附近有敵人需要防護，給予高優先級
                     const enemies = this.getEnemyUnits();
                     let minDist = 99;
                     enemies.forEach(e => {
@@ -103,11 +103,11 @@ class AIController {
                         if (d < minDist) minDist = d;
                     });
 
-                    // Use aura if enemies are threatening (range <= 6)
+                    // 如果敵人有威脅 (範圍 <= 6)，使用光環
                     if (minDist <= 6) {
                         score += 80;
                     } else {
-                        score -= 50; // Don't waste if far away
+                        score -= 50; // 如果太遠不要浪費
                     }
                 } else if (action.type === 'move') {
                     // Cluster heuristic: Bonus for ending turn near allies
@@ -140,36 +140,36 @@ class AIController {
 
                     // --- NEW SAFETY RULES ---
 
-                    // 1. Isolation Penalty: Don't rush alone
+                    // 1. 孤立懲罰：不要單獨衝鋒
                     if (alliesNear === 0) {
-                        score -= 50; // Heavy penalty for ending turn away from ALL allies
+                        score -= 50; // 遠離所有盟友會受到重罰
                     }
 
-                    // 2. King Safety & Aggression
+                    // 2. 國王安全與侵略性
                     if (unit.type === 'king') {
-                        // A: Safety Penalty (Avoid rushing deep unless healthy)
-                        let limitY = 2; // Default safe zone (0-2)
+                        // A: 安全懲罰（除非健康狀況良好，否則避免深入）
+                        let limitY = 2; // 預設安全區 (0-2)
 
-                        // If Healthy (>60%), relax limit to mid-field (0-6)
+                        // 如果健康 (>60%)，放寬限制至中場 (0-6)
                         if (unit.hp >= unit.max_hp * 0.6) {
                             limitY = 6;
                         }
 
-                        // For Red King (starts at top, Y=0)
+                        // 對於紅方國王（從頂部開始，Y=0）
                         if (this.team === 'red') {
                             if (ty > limitY) score -= (ty - limitY) * 20;
                         } else {
-                            // Blue King (starts at bottom, Y=14)
+                            // 藍方國王（從底部開始，Y=14）
                             if (ty < (14 - limitY)) score -= ((14 - limitY) - ty) * 20;
                         }
 
-                        // B: Isolation Penalty (King needs guards)
+                        // B: 孤立懲罰（國王需要護衛）
                         if (alliesNear < 2) score -= 30;
 
-                        // C: Engagement Bonus (If Healthy, Attack!)
-                        // If moving puts us adjacent to enemy (distance=1), giving a chance to attack next turn
+                        // C: 交戰獎勵（如果健康，進攻！）
+                        // 如果移動後與敵人相鄰（距離=1），下回合有機會攻擊
                         if (minEnemyDist === 1 && unit.hp >= unit.max_hp * 0.6) {
-                            score += 40; // Encourage engaging
+                            score += 40; // 鼓勵交戰
                         }
                     }
                 }
@@ -189,15 +189,15 @@ class AIController {
     evaluateActionBasic(unit, action) {
         let score = 0;
         if (action.type === 'attack') {
-            // Estimate damage
+            // 估計傷害
             const target = this.engine.state.board[`${action.target.x}_${action.target.y}`];
             if (target) {
                 score += 50;
-                if (target.hp <= 30) score += 50; // Execute priority
-                if (target.type === 'king') score += 200; // Kill King
+                if (target.hp <= 30) score += 50; // 斬殺優先
+                if (target.type === 'king') score += 200; // 擊殺國王
             }
         } else if (action.type === 'move') {
-            // Heuristic: Advance towards Y=14 (Blue side) if Red
+            // 啟發式：如果是紅方，向 Y=14（藍方）推進
             if (this.team === 'red') {
                 if (action.target.y > unit.y) score += 5;
             } else {
@@ -207,7 +207,7 @@ class AIController {
         return score;
     }
 
-    // ================== HELPERS ==================
+    // ================== 輔助方法 ==================
 
     getMyUnits() {
         const units = [];
@@ -244,13 +244,13 @@ class AIController {
         const stats = UNIT_STATS[unit.type];
         const teamAP = this.team === 'red' ? this.engine.state.red_ap : this.engine.state.blue_ap;
 
-        // 1. Move Actions
+        // 1. 移動動作
         const dirs = [[0, 1], [0, -1], [1, 0], [-1, 0]];
         if (teamAP >= stats.ap_move) {
             dirs.forEach(([dx, dy]) => {
                 const tx = unit.x + dx;
                 const ty = unit.y + dy;
-                // Bounds
+                // 邊界檢查
                 if (tx >= 0 && tx < BOARD_COLS && ty >= 0 && ty < BOARD_ROWS) {
                     if (!this.engine.getUnitAt(tx, ty)) {
                         actions.push({ type: 'move', moveType: 'move', target: { x: tx, y: ty } });
@@ -259,18 +259,18 @@ class AIController {
             });
         }
 
-        // B. Jump Moves (Range 2-3) - Fixed 1 AP
+        // B. 跳躍移動（範圍 2-3）- 固定 1 AP
         if (teamAP >= 1) {
             const jumps = [2, 3, -2, -3];
             jumps.forEach(d => {
-                // Horizontal
+                // 水平跳躍
                 let tx = unit.x + d;
                 let ty = unit.y;
                 if (tx >= 0 && tx < BOARD_COLS) {
                     const result = this.engine.canJump(unit, unit.x, unit.y, tx, ty);
                     if (result.can_jump) actions.push({ type: 'move', moveType: 'jump', target: { x: tx, y: ty } });
                 }
-                // Vertical
+                // 垂直跳躍
                 tx = unit.x;
                 ty = unit.y + d;
                 if (ty >= 0 && ty < BOARD_ROWS) {
@@ -280,7 +280,7 @@ class AIController {
             });
         }
 
-        // 2. Attack Actions
+        // 2. 攻擊動作
         if (teamAP >= stats.ap_atk) {
             if (unit.type === 'can' && unit.cooldown > 0) return actions;
             if ((unit.type === 'arc' || unit.type === 'mage') && unit.attacks_used >= 2) return actions;
@@ -301,7 +301,7 @@ class AIController {
             });
         }
 
-        // 3. Skill Actions (General Aura)
+        // 3. 技能動作（將軍光環）
         if (unit.type === 'gen' && teamAP >= 2) {
             if (!unit.aura_active && unit.aura_cooldown <= 0) {
                 actions.push({ type: 'skill', skillName: 'aura', target: { x: unit.x, y: unit.y } });

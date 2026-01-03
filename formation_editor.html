@@ -271,6 +271,122 @@
         .delete-icon:hover {
             color: red;
         }
+
+        /* ==================== 手機版響應式佈局 ==================== */
+        @media (max-width: 768px) {
+            body {
+                padding: 10px;
+            }
+
+            h1 {
+                font-size: 28px !important;
+                margin-top: 10px !important;
+            }
+
+            .editor-container {
+                flex-direction: column;
+                align-items: center;
+                gap: 20px;
+                margin-top: 10px;
+            }
+
+            /* 棋盤先顯示 */
+            .grid-area {
+                order: 1;
+            }
+
+            /* 可選兵種移到下方 */
+            .palette {
+                order: 2;
+                width: 100%;
+                max-width: 500px;
+            }
+
+            /* 儲存管理移到最下方 */
+            .controls-panel {
+                order: 3;
+                width: 100%;
+                max-width: 500px;
+            }
+
+            /* 縮小棋盤格子 */
+            .formation-grid {
+                grid-template-columns: repeat(13, 40px);
+                grid-template-rows: repeat(4, 40px);
+            }
+
+            .grid-cell {
+                width: 40px;
+                height: 40px;
+            }
+
+            .grid-cell img {
+                width: 35px;
+                height: 35px;
+            }
+        }
+
+        /* 手機直向更小的螢幕 */
+        @media (max-width: 600px) {
+            .formation-grid {
+                grid-template-columns: repeat(13, 32px);
+                grid-template-rows: repeat(4, 32px);
+                gap: 1px;
+                padding: 3px;
+            }
+
+            .grid-cell {
+                width: 32px;
+                height: 32px;
+            }
+
+            .grid-cell img {
+                width: 28px;
+                height: 28px;
+            }
+        }
+
+        @media (max-width: 480px) {
+            h1 {
+                font-size: 24px !important;
+            }
+
+            /* 更小的棋盤 */
+            .formation-grid {
+                grid-template-columns: repeat(13, 26px);
+                grid-template-rows: repeat(4, 26px);
+                gap: 1px;
+                padding: 2px;
+            }
+
+            .grid-cell {
+                width: 26px;
+                height: 26px;
+            }
+
+            .grid-cell img {
+                width: 22px;
+                height: 22px;
+            }
+
+            /* 調整兵種面板 */
+            .unit-item {
+                padding: 8px;
+            }
+
+            .unit-item img {
+                width: 32px;
+                height: 32px;
+                margin-right: 10px;
+            }
+
+            /* 調整按鈕 */
+            .btn {
+                padding: 12px;
+                font-size: 14px;
+                min-height: 48px;
+            }
+        }
     </style>
 </head>
 
